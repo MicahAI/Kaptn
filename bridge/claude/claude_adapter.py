@@ -115,6 +115,21 @@ class ClaudeAdapter:
             }
         }
 
+    def status(self) -> dict:
+        """Snapshot of live AutoPilot state for the /status endpoint.
+
+        Returns:
+            Dict with autopilot enabled flag, paused windows, rule count,
+            and per-rule limit counters (including per-scope breakdown).
+        """
+        with self._lock:
+            return {
+                "autopilot_enabled": self.autopilot.enabled,
+                "paused_windows": sorted(self.autopilot.paused_windows),
+                "rules_loaded": len(self.autopilot.rule_evaluator.rules),
+                "limit_status": self.autopilot.rule_evaluator.get_limit_status(),
+            }
+
     def reset(self) -> dict:
         """Reset AutoPilot state: rule limits, loop history, paused windows.
 

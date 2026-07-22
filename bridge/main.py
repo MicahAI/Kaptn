@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import signal
-import sys
 import uuid
 from datetime import datetime
 
@@ -554,25 +553,50 @@ def reset_command(config: str, port: int | None):
 @cli.command()
 @click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
 def status(config: str):
-    """Check if CDP is available and list connected windows."""
-    setup_logging(level="WARNING")
+    """Full status: servers, AutoPilot config, live usage, audit summary."""
+    from bridge import status_report
 
-    config_manager = ConfigManager(config)
-    cfg = config_manager.load()
+    # CRITICAL: probing CDP/hook servers that are down is normal here —
+    # their ERROR logs would clutter the report
+    setup_logging(level="CRITICAL")
 
-    discovery = CdpDiscovery(port=cfg.get("cdp_port", 9222))
+    cfg = ConfigManager(config).load()
+    audit = AuditLogger(db_path=cfg.get("audit_db", "kaptn_audit.db"))
+    try:
+        for line in status_report.build_report(cfg, audit):
+            click.echo(line)
+    finally:
+        audit.close()
 
-    if not discovery.is_available():
-        click.echo("❌ CDP not available. Is the IDE running with --remote-debugging-port?")
-        sys.exit(1)
 
-    version = discovery.get_version()
-    click.echo(f"✅ Connected to: {version.get('Browser', 'unknown')}")
+HELP_TEXT = """\
+Kaptn — remote command & control for AI coding assistants
 
-    pages = discovery.get_page_targets()
-    click.echo(f"\n📁 Windows ({len(pages)}):")
-    for page in pages:
-        click.echo(f"   - {page.workspace_name or page.title}")
+Core:
+  kaptn start            Run the full bridge: CDP IDE windows + Claude hook server
+  kaptn stop             Stop everything (launchd agent + manual instances)
+  kaptn reset            Clear rule limits, loop history, and pauses on the running server
+  kaptn status           Servers, AutoPilot config, live usage, and audit summary
+  kaptn log              Show the audit log (-n COUNT, --loops for loop events)
+  kaptn help             This overview
+
+Claude Code (kaptn claude ...):
+  install                Register the PreToolUse hook in Claude settings (--project for one repo)
+  uninstall              Remove the hook entry from Claude settings
+  serve                  Run the hook decision server standalone (no CDP needed)
+  status                 Quick health check of the hook server
+
+MCP (kaptn mcp ...):
+  start                  Run the Kaptn MCP server (stdio) for agent-driven approvals
+
+Config: kaptn.config.json — rules, limits, ports. Details in docs/features/.
+Add --help to any command for its options (e.g. kaptn claude install --help)."""
+
+
+@cli.command("help")
+def help_command():
+    """Overview of all Kaptn commands."""
+    click.echo(HELP_TEXT)
 
 
 @cli.command("log")

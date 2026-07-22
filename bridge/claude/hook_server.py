@@ -48,9 +48,11 @@ class _HookHandler(BaseHTTPRequestHandler):
         self._send(200, result or {})
 
     def do_GET(self) -> None:  # noqa: N802 — http.server API
-        """Health check endpoint."""
+        """Health check and live-status endpoints."""
         if self.path == "/health":
             self._send(200, {"status": "ok"})
+        elif self.path == "/status":
+            self._send(200, self.server.adapter.status())
         else:
             self._send(404, {"error": "not found"})
 

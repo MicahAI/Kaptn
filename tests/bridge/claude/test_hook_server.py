@@ -80,6 +80,14 @@ def test_get_unknown_path_404(server):
     assert exc_info.value.code == 404
 
 
+def test_status_endpoint(server):
+    with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/status", timeout=5) as response:
+        body = json.loads(response.read())
+    assert body["autopilot_enabled"] is True
+    assert body["rules_loaded"] == 1
+    assert "limit_status" in body
+
+
 def test_reset_endpoint(server):
     status, body = post(server, "/reset", {})
     assert status == 200
