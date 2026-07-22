@@ -80,6 +80,12 @@ def test_get_unknown_path_404(server):
     assert exc_info.value.code == 404
 
 
+def test_reset_endpoint(server):
+    status, body = post(server, "/reset", {})
+    assert status == 200
+    assert body == {"status": "reset"}
+
+
 def test_adapter_exception_500(server):
     def boom(event):
         raise RuntimeError("boom")

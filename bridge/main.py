@@ -20,6 +20,7 @@ from bridge.autopilot.rule_evaluator import RuleEvaluator
 from bridge.cdp.cdp_connection import CdpConnection
 from bridge.cdp.cdp_discovery import CdpDiscovery
 from bridge.cdp.cdp_evaluator import CdpEvaluator
+from bridge import lifecycle
 from bridge.claude.claude_adapter import ClaudeAdapter
 from bridge.claude.cli import claude_group
 from bridge.claude.hook_server import ClaudeHookServer
@@ -493,6 +494,61 @@ def start(config: str, log_level: str):
         loop.run_until_complete(bridge.stop())
     finally:
         loop.close()
+
+
+@cli.command("stop")
+@click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
+def stop_command(config: str):
+    """Stop all running Kaptn servers (launchd agent and manual instances)."""
+    setup_logging(level="WARNING")
+
+    cfg = ConfigManager(config).load()
+    label = cfg.get("claude", {}).get(
+        "launchd_label", lifecycle.DEFAULT_LAUNCHD_LABEL
+    )
+
+    report = lifecycle.stop_all(label)
+
+    if report["agent_stopped"]:
+        click.echo(f"✅ launchd agent '{label}' stopped")
+        click.echo("   (returns at next login — or now via 'launchctl bootstrap "
+                   f"gui/$UID ~/Library/LaunchAgents/{label}.plist')")
+    if report["stopped"]:
+        pids = ", ".join(str(p) for p in report["stopped"])
+        click.echo(f"✅ Stopped process(es): {pids}")
+    if report["killed"]:
+        pids = ", ".join(str(p) for p in report["killed"])
+        click.echo(f"⚠️  Force-killed unresponsive process(es): {pids}")
+    if not (report["agent_stopped"] or report["stopped"] or report["killed"]):
+        click.echo("✓ Nothing was running.")
+
+
+@cli.command("reset")
+@click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
+@click.option("--port", default=None, type=int, help="Hook server port override.")
+def reset_command(config: str, port: int | None):
+    """Reset AutoPilot limits, loop history, and pauses on the running server."""
+    import urllib.error
+    import urllib.request
+
+    setup_logging(level="WARNING")
+
+    cfg = ConfigManager(config).load()
+    resolved_port = port if port is not None else cfg.get("claude", {}).get("hook_port", 3002)
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{resolved_port}/reset", data=b"{}", method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            json.loads(response.read() or b"{}")
+    except (urllib.error.URLError, OSError, TimeoutError, json.JSONDecodeError):
+        click.echo(f"❌ Hook server not reachable on port {resolved_port}.")
+        click.echo("   (A server restart also resets limits: "
+                   "launchctl kickstart -k gui/$UID/com.micahai.kaptn.claude)")
+        raise SystemExit(1)
+
+    click.echo("✅ AutoPilot reset — rule limits cleared, loop history cleared, "
+               "paused windows resumed.")
 
 
 @cli.command()

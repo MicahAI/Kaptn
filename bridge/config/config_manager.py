@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "claude": {
         "enabled": True,
         "hook_port": 3002,
+        "launchd_label": "com.micahai.kaptn.claude",
     },
     "poll_intervals": {
         "messages": 2.0,

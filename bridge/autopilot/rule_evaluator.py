@@ -15,7 +15,10 @@ class RuleEvaluator:
     """Evaluates approval requests against a list of configured rules.
 
     Rules are checked in order — first match wins. If no rule matches,
-    the request is escalated. Limits are tracked per rule and enforced.
+    the request is escalated. Limits are tracked per rule *per scope* and
+    enforced: the scope is the Claude session id when present (each Claude
+    conversation gets its own allowance), otherwise the window name (each
+    IDE window gets its own), falling back to a single global scope.
     """
 
     def __init__(self, rules: list[dict]) -> None:
@@ -31,10 +34,21 @@ class RuleEvaluator:
         """
         self.rules = rules
         self.temp_rules: TempRuleManager | None = None
-        self._session_counts: dict[str, int] = defaultdict(int)
-        self._minute_timestamps: dict[str, list[float]] = defaultdict(list)
-        self._consecutive_counts: dict[str, int] = defaultdict(int)
-        self._last_rule_id: str | None = None
+        # Counters keyed by (scope, rule_id) — scope is session/window
+        self._session_counts: dict[tuple[str, str], int] = defaultdict(int)
+        self._minute_timestamps: dict[tuple[str, str], list[float]] = defaultdict(list)
+        self._consecutive_counts: dict[tuple[str, str], int] = defaultdict(int)
+        self._last_rule_id: dict[str, str | None] = {}
+
+    @staticmethod
+    def _scope_for(request: ApprovalRequest) -> str:
+        """Determine the limit scope for a request.
+
+        Claude requests carry a session_id in details — limits are per
+        conversation. CDP requests fall back to the window name.
+        """
+        details = request.details or {}
+        return details.get("session_id") or request.window_name or "global"
 
     def evaluate(self, request: ApprovalRequest) -> tuple[ApprovalAction, str | None, str]:
         """Evaluate a request against all rules, returning the first match.
@@ -72,12 +86,13 @@ class RuleEvaluator:
             action = ApprovalAction(action_str) if action_str in ApprovalAction.__members__.values() else ApprovalAction.ESCALATE
 
             if action == ApprovalAction.APPROVE:
-                limit_exceeded, limit_reason = self._check_limits(rule)
+                scope = self._scope_for(request)
+                limit_exceeded, limit_reason = self._check_limits(rule, scope)
                 if limit_exceeded:
                     logger.info("Rule '%s' matched but limit exceeded: %s", rule_id, limit_reason)
                     return ApprovalAction.ESCALATE, rule_id, f"limit_exceeded:{limit_reason}"
 
-                self._increment_counters(rule_id)
+                self._increment_counters(rule_id, scope)
 
             logger.debug("Rule '%s' matched: category=%s action=%s", rule_id, rule_category, action_str)
             return action, rule_id, "rule_matched"
@@ -160,11 +175,12 @@ class RuleEvaluator:
 
         return True
 
-    def _check_limits(self, rule: dict) -> tuple[bool, str]:
-        """Check if a rule's limits have been exceeded.
+    def _check_limits(self, rule: dict, scope: str) -> tuple[bool, str]:
+        """Check if a rule's limits have been exceeded within a scope.
 
         Args:
             rule: The rule dict containing limits.
+            scope: The session/window scope for the counters.
 
         Returns:
             Tuple of (exceeded: bool, reason: str).
@@ -173,12 +189,12 @@ class RuleEvaluator:
         if not limits:
             return False, ""
 
-        rule_id = rule.get("id", "unnamed")
+        key = (scope, rule.get("id", "unnamed"))
 
         # Max per session
         max_session = limits.get("max_per_session")
         if max_session is not None:
-            current = self._session_counts[rule_id]
+            current = self._session_counts[key]
             if current >= max_session:
                 return True, f"max_per_session ({current}/{max_session})"
 
@@ -186,7 +202,7 @@ class RuleEvaluator:
         max_minute = limits.get("max_per_minute")
         if max_minute is not None:
             now = time.time()
-            timestamps = self._minute_timestamps[rule_id]
+            timestamps = self._minute_timestamps[key]
             # Clean old timestamps
             timestamps[:] = [t for t in timestamps if now - t < 60.0]
             if len(timestamps) >= max_minute:
@@ -195,52 +211,61 @@ class RuleEvaluator:
         # Max consecutive
         max_consecutive = limits.get("max_consecutive")
         if max_consecutive is not None:
-            if self._last_rule_id == rule_id:
-                consecutive = self._consecutive_counts[rule_id]
+            if self._last_rule_id.get(scope) == key[1]:
+                consecutive = self._consecutive_counts[key]
                 if consecutive >= max_consecutive:
                     return True, f"max_consecutive ({consecutive}/{max_consecutive})"
 
         return False, ""
 
-    def _increment_counters(self, rule_id: str) -> None:
+    def _increment_counters(self, rule_id: str, scope: str) -> None:
         """Increment limit counters after an approval.
 
         Args:
             rule_id: The ID of the rule that was triggered.
+            scope: The session/window scope for the counters.
         """
-        self._session_counts[rule_id] += 1
-        self._minute_timestamps[rule_id].append(time.time())
+        key = (scope, rule_id)
+        self._session_counts[key] += 1
+        self._minute_timestamps[key].append(time.time())
 
-        if self._last_rule_id == rule_id:
-            self._consecutive_counts[rule_id] += 1
+        if self._last_rule_id.get(scope) == rule_id:
+            self._consecutive_counts[key] += 1
         else:
-            self._consecutive_counts[rule_id] = 1
-            self._last_rule_id = rule_id
+            self._consecutive_counts[key] = 1
+            self._last_rule_id[scope] = rule_id
 
     def reset_rule_limit(self, rule_id: str) -> None:
-        """Reset limit counters for a specific rule.
+        """Reset limit counters for a specific rule across all scopes.
 
         Args:
             rule_id: The ID of the rule whose limits should be reset.
         """
-        prev = self._session_counts.get(rule_id, 0)
-        self._session_counts[rule_id] = 0
-        self._minute_timestamps.pop(rule_id, None)
-        self._consecutive_counts.pop(rule_id, None)
-        if self._last_rule_id == rule_id:
-            self._last_rule_id = None
+        prev = sum(c for (_, rid), c in self._session_counts.items() if rid == rule_id)
+        for key in [k for k in self._session_counts if k[1] == rule_id]:
+            del self._session_counts[key]
+        for key in [k for k in self._minute_timestamps if k[1] == rule_id]:
+            del self._minute_timestamps[key]
+        for key in [k for k in self._consecutive_counts if k[1] == rule_id]:
+            del self._consecutive_counts[key]
+        for scope, last in list(self._last_rule_id.items()):
+            if last == rule_id:
+                self._last_rule_id[scope] = None
         logger.info("Rule '%s' limits reset (was %d)", rule_id, prev)
 
     def reset_limits(self) -> None:
-        """Reset all limit counters."""
+        """Reset all limit counters across all scopes."""
         self._session_counts.clear()
         self._minute_timestamps.clear()
         self._consecutive_counts.clear()
-        self._last_rule_id = None
+        self._last_rule_id.clear()
         logger.info("All rule limits reset")
 
     def get_limit_status(self) -> dict[str, dict]:
         """Return current limit counters for all rules.
+
+        Counts are summed across scopes; a per-scope breakdown is included
+        under 'scopes' when any scope has activity.
 
         Returns:
             Dict mapping rule_id to their current counter values.
@@ -251,10 +276,24 @@ class RuleEvaluator:
             limits = rule.get("limits", {})
             if not limits:
                 continue
+            scopes = {
+                scope: count
+                for (scope, rid), count in self._session_counts.items()
+                if rid == rule_id
+            }
+            minute_count = sum(
+                len(ts) for (_, rid), ts in self._minute_timestamps.items()
+                if rid == rule_id
+            )
+            consecutive = max(
+                (c for (_, rid), c in self._consecutive_counts.items() if rid == rule_id),
+                default=0,
+            )
             status[rule_id] = {
-                "session_count": self._session_counts.get(rule_id, 0),
-                "minute_count": len(self._minute_timestamps.get(rule_id, [])),
-                "consecutive_count": self._consecutive_counts.get(rule_id, 0),
+                "session_count": sum(scopes.values()),
+                "minute_count": minute_count,
+                "consecutive_count": consecutive,
                 "limits": limits,
+                "scopes": scopes,
             }
         return status

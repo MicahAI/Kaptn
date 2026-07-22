@@ -118,6 +118,54 @@ class TestAuditAndContext:
         assert adapter.audit.get_recent(limit=1)[0]["window_name"] == "claude"
 
 
+class TestPerSessionLimits:
+    def test_sessions_do_not_share_caps(self, adapter):
+        # Session A exhausts its 2-write allowance
+        for path in ("/tmp/a1.py", "/tmp/a2.py"):
+            event = make_event("Write", {"file_path": path})
+            event["session_id"] = "session-A"
+            assert adapter.handle_hook_event(event)["hookSpecificOutput"]["permissionDecision"] == "allow"
+        event = make_event("Write", {"file_path": "/tmp/a3.py"})
+        event["session_id"] = "session-A"
+        assert adapter.handle_hook_event(event)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+        # Session B starts fresh — full allowance despite A being capped
+        event = make_event("Write", {"file_path": "/tmp/b1.py"})
+        event["session_id"] = "session-B"
+        assert adapter.handle_hook_event(event)["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_limit_status_reports_scopes(self, adapter):
+        event = make_event("Write", {"file_path": "/tmp/a.py"})
+        event["session_id"] = "session-A"
+        adapter.handle_hook_event(event)
+        status = adapter.autopilot.rule_evaluator.get_limit_status()
+        assert status["allow-writes"]["scopes"] == {"session-A": 1}
+
+
+class TestReset:
+    def test_reset_clears_limits(self, adapter):
+        event1 = make_event("Write", {"file_path": "/tmp/w.py"})
+        event2 = make_event("Write", {"file_path": "/tmp/w2.py"})
+        event3 = make_event("Write", {"file_path": "/tmp/w3.py"})
+        adapter.handle_hook_event(event1)
+        adapter.handle_hook_event(event2)
+        assert adapter.handle_hook_event(event3)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+        assert adapter.reset() == {"status": "reset"}
+        event4 = make_event("Write", {"file_path": "/tmp/w4.py"})
+        assert adapter.handle_hook_event(event4)["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_reset_clears_loop_pause(self, adapter):
+        event = make_event("Bash", {"command": "cat same.txt"})
+        for _ in range(3):
+            adapter.handle_hook_event(event)  # third one trips the loop → pause
+        other = make_event("Read")
+        assert adapter.handle_hook_event(other)["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+        adapter.reset()
+        assert adapter.handle_hook_event(other)["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
 class TestLoopDetection:
     def test_repeated_action_denied_as_loop(self, adapter):
         event = make_event("Bash", {"command": "cat same.txt"})

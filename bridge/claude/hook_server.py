@@ -24,6 +24,9 @@ class _HookHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 — http.server API
         """Evaluate a hook event and respond with the decision JSON."""
+        if self.path == "/reset":
+            self._send(200, self.server.adapter.reset())
+            return
         if self.path != "/hook":
             self._send(404, {"error": "not found"})
             return

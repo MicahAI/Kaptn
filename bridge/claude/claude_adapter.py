@@ -115,6 +115,22 @@ class ClaudeAdapter:
             }
         }
 
+    def reset(self) -> dict:
+        """Reset AutoPilot state: rule limits, loop history, paused windows.
+
+        Exposed via the hook server's /reset endpoint so `kaptn reset` can
+        clear limit_exceeded escalations without restarting the server.
+
+        Returns:
+            Status dict for the HTTP response.
+        """
+        with self._lock:
+            self.autopilot.rule_evaluator.reset_limits()
+            self.autopilot.loop_detector.clear()
+            self.autopilot.resume_all()
+        logger.info("AutoPilot state reset (limits, loop history, pauses)")
+        return {"status": "reset"}
+
     @staticmethod
     def _reason_text(action: ApprovalAction, rule_id: str | None, reason: str) -> str:
         """Build the human/model-facing explanation for a decision."""

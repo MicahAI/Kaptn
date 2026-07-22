@@ -52,6 +52,11 @@
         "action": "approve"
       },
       {
+        "id": "allow-tool-calls",
+        "category": "tool_call",
+        "action": "approve"
+      },
+      {
         "id": "escalate-unknown",
         "category": "unknown",
         "action": "escalate"

@@ -64,10 +64,29 @@ kaptn claude install            # or --project <dir> for one project
 kaptn claude serve              # Claude Code only, no CDP needed
 kaptn start                     # CDP bridge + Claude hook server together
 
+kaptn stop                      # stop everything (launchd agent + manual instances)
+kaptn reset                     # clear rule limits / loop history / pauses on the running server
 kaptn claude status             # is the hook server up?
 kaptn claude uninstall          # remove the hook entry
 kaptn log                       # audit trail (shared with CDP decisions)
 ```
+
+## Limits are per session
+
+Rule limits (`max_per_session`) are scoped per Claude session id — every
+new Claude Code conversation gets a fresh allowance, and sessions never
+drain each other's caps (CDP windows are scoped per window name the same
+way). When a session does hit its cap, decisions escalate to normal
+permission prompts; `kaptn reset` clears all counters for another batch.
+Time-based caps are available via `max_per_minute` on any rule.
+
+## launchd (start at login)
+
+A user LaunchAgent (label `com.micahai.kaptn.claude`, configurable via
+`claude.launchd_label`) can run `kaptn claude serve` at login with
+KeepAlive. `kaptn stop` boots the agent out first — otherwise KeepAlive
+would resurrect the process — then terminates any manual instances. The
+agent returns at next login, or immediately via `launchctl bootstrap`.
 
 Config lives under the `claude` key in `kaptn.config.json`:
 
@@ -77,6 +96,9 @@ Config lives under the `claude` key in `kaptn.config.json`:
 
 Audit records from Claude sessions use `mode="claude"`, window name
 `claude:<project-dir>`, and the Claude session id as `tab_id`.
+
+Note: rules need a `tool_call` category entry to cover MCP and agent
+tools — without one they escalate as `no_matching_rule`.
 
 ## Known gaps
 
