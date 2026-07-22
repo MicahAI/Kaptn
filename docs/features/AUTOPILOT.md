@@ -124,12 +124,14 @@ Each rule matches a category and defines conditions and limits.
 
 ### 3.3 Actions
 
-| Action | Behavior |
-|---|---|
-| `approve` | Click the approve button |
-| `deny` | Click the deny button |
-| `escalate` | Do nothing — wait for manual approval (PWA notification or user at desk) |
-| `approve_n` | Approve the next N occurrences, then escalate |
+| Action | IDE (CDP) behavior | Claude Code (hook) behavior |
+|---|---|---|
+| `approve` | Click the approve button | `allow` the tool call |
+| `deny` | Click the deny button (dialog stays overridable by the user) | `ask` with a "recommends denying" reason — the user can override; set `"hard_deny": true` on the rule to hard-block instead |
+| `escalate` | Do nothing — wait for manual approval (PWA notification or user at desk) | `ask` — Claude Code's normal permission prompt |
+| `approve_n` | Approve the next N occurrences, then escalate | Same |
+
+Deny is a *recommendation*, not a wall: in both modes the user keeps the final say, matching the IDE's deny-with-override behavior. The exceptions are rules marked `"hard_deny": true` and loop-detection denies (the anti-runaway brake), which hard-block in hook mode.
 
 ### 3.4 Conditions
 

@@ -26,9 +26,9 @@
         }
       },
       {
-        "id": "escalate-file-deletes",
+        "id": "block-file-deletes",
         "category": "file_delete",
-        "action": "escalate"
+        "action": "deny"
       },
       {
         "id": "allow-safe-commands",

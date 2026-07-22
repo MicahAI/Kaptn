@@ -127,6 +127,7 @@ Rules define what AutoPilot does with each type of approval. Evaluated in order 
 
 Each rule supports:
 - **`action`**: `approve`, `deny`, or `escalate`
+- **`hard_deny`**: (deny rules, Claude hook mode) `true` hard-blocks the tool call; default `false` surfaces an overridable prompt with a "recommends denying" reason — matching the IDE, where a deny click is always user-overridable
 - **`limits`**: `max_per_session`, `max_per_minute`, `max_consecutive`
 - **`conditions`**: `path_patterns`, `exclude_patterns`, `command_patterns`, `tool_names`
 

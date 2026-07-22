@@ -15,7 +15,10 @@ from bridge.claude.hook_server import ClaudeHookServer
 
 RULES = [
     {"id": "allow-reads", "category": "file_read", "action": "approve"},
-    {"id": "block-deletes", "category": "file_delete", "action": "deny"},
+    # hard_deny so the wire test still sees a "deny" decision — plain deny
+    # rules now surface as overridable "ask" (see test_claude_adapter.py).
+    {"id": "block-deletes", "category": "file_delete", "action": "deny",
+     "hard_deny": True},
 ]
 
 EVENT = {

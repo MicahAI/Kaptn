@@ -29,6 +29,11 @@ class RuleEvaluator:
                 - id (str): Unique rule identifier
                 - category (str): ApprovalCategory value to match
                 - action (str): "approve", "deny", or "escalate"
+                - hard_deny (bool, optional): For "deny" rules in Claude hook
+                  mode — True hard-blocks the tool call; default False maps
+                  the deny to an overridable 'ask' (IDE deny-with-override
+                  parity). Ignored by the IDE drivers, where a deny is
+                  always user-overridable in the dialog.
                 - conditions (dict, optional): path_patterns, exclude_patterns, command_patterns
                 - limits (dict, optional): max_per_session, max_per_minute, max_consecutive
         """

@@ -13,6 +13,8 @@ RULES = [
     {"id": "allow-reads", "category": "file_read", "action": "approve"},
     {"id": "allow-writes", "category": "file_write", "action": "approve",
      "limits": {"max_per_session": 2}},
+    {"id": "hard-block-secret-deletes", "category": "file_delete", "action": "deny",
+     "hard_deny": True, "conditions": {"command_patterns": ["*secret*"]}},
     {"id": "block-deletes", "category": "file_delete", "action": "deny"},
     {"id": "allow-safe", "category": "command_safe", "action": "approve"},
 ]
@@ -47,13 +49,32 @@ class TestDecisions:
         assert output["permissionDecision"] == "allow"
         assert "allow-reads" in output["permissionDecisionReason"]
 
-    def test_deny_maps_to_deny(self, adapter):
+    def test_rule_deny_maps_to_overridable_ask(self, adapter):
+        # IDE parity: a deny rule is a recommendation the user can override,
+        # so it surfaces Claude Code's permission prompt instead of blocking.
         result = adapter.handle_hook_event(
             make_event("Bash", {"command": "rm -rf build"})
         )
         output = result["hookSpecificOutput"]
-        assert output["permissionDecision"] == "deny"
+        assert output["permissionDecision"] == "ask"
+        assert "recommends denying" in output["permissionDecisionReason"]
         assert "block-deletes" in output["permissionDecisionReason"]
+
+    def test_hard_deny_rule_still_blocks(self, adapter):
+        result = adapter.handle_hook_event(
+            make_event("Bash", {"command": "rm secret.pem"})
+        )
+        output = result["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert "hard-block-secret-deletes" in output["permissionDecisionReason"]
+        assert "recommends" not in output["permissionDecisionReason"]
+
+    def test_soft_deny_notifies_escalation_handler(self, adapter):
+        adapter.handle_hook_event(make_event("Bash", {"command": "rm -rf build"}))
+        pending = adapter.escalation.get_pending()
+        assert len(pending) == 1
+        assert pending[0].reason == "deny_recommended:rule_matched"
+        assert pending[0].rule_id == "block-deletes"
 
     def test_no_rule_maps_to_ask(self, adapter):
         result = adapter.handle_hook_event(

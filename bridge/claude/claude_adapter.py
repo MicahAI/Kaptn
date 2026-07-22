@@ -28,8 +28,15 @@ class ClaudeAdapter:
     """Evaluates Claude Code hook events with the shared AutoPilot engine.
 
     Decisions map to Claude Code's PreToolUse hook contract:
-    APPROVE → 'allow', DENY → 'deny', ESCALATE → 'ask' (falls back to
-    Claude Code's normal permission prompt — fail-safe by design).
+    APPROVE → 'allow', ESCALATE → 'ask' (falls back to Claude Code's
+    normal permission prompt — fail-safe by design).
+
+    DENY matches the IDE drivers' deny-with-override semantics: in the IDE,
+    AutoPilot clicks reject in a dialog the user can still override, so a
+    rule-based DENY here maps to 'ask' with a "recommends denying" reason.
+    A rule can opt back into a hard block with `"hard_deny": true`.
+    Loop-detection denies (no rule) always hard-deny — they are the
+    anti-runaway brake, not a policy recommendation.
     """
 
     def __init__(
@@ -99,10 +106,17 @@ class ClaudeAdapter:
                 loop_detected=(reason == "loop_detected"),
             )
 
-        if action == ApprovalAction.ESCALATE and self.escalation:
-            self.escalation.escalate(request, reason, rule_id)
+        soft_deny = (
+            action == ApprovalAction.DENY
+            and rule_id is not None
+            and not self._matched_rule(rule_id).get("hard_deny", False)
+        )
 
-        decision = _DECISION_MAP[action]
+        if self.escalation and (action == ApprovalAction.ESCALATE or soft_deny):
+            esc_reason = f"deny_recommended:{reason}" if soft_deny else reason
+            self.escalation.escalate(request, esc_reason, rule_id)
+
+        decision = "ask" if soft_deny else _DECISION_MAP[action]
         logger.info(
             "[%s] Claude %s: %s '%s' (rule=%s, reason=%s)",
             window, decision.upper(), category.value, action_text[:60], rule_id, reason,
@@ -111,9 +125,18 @@ class ClaudeAdapter:
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": decision,
-                "permissionDecisionReason": self._reason_text(action, rule_id, reason),
+                "permissionDecisionReason": self._reason_text(
+                    action, rule_id, reason, soft_deny=soft_deny
+                ),
             }
         }
+
+    def _matched_rule(self, rule_id: str) -> dict:
+        """Return the static rule dict for an id, or {} (e.g. temp rules)."""
+        for rule in self.autopilot.rule_evaluator.rules:
+            if rule.get("id") == rule_id:
+                return rule
+        return {}
 
     def status(self) -> dict:
         """Snapshot of live AutoPilot state for the /status endpoint.
@@ -147,11 +170,19 @@ class ClaudeAdapter:
         return {"status": "reset"}
 
     @staticmethod
-    def _reason_text(action: ApprovalAction, rule_id: str | None, reason: str) -> str:
+    def _reason_text(
+        action: ApprovalAction, rule_id: str | None, reason: str,
+        soft_deny: bool = False,
+    ) -> str:
         """Build the human/model-facing explanation for a decision."""
         rule_part = f"rule={rule_id}" if rule_id else "no rule"
         if action == ApprovalAction.APPROVE:
             return f"Kaptn AutoPilot approved ({rule_part})"
         if action == ApprovalAction.DENY:
+            if soft_deny:
+                return (
+                    f"Kaptn AutoPilot recommends denying ({rule_part}) "
+                    "— approve to override"
+                )
             return f"Kaptn AutoPilot denied ({rule_part}, {reason})"
         return f"Kaptn escalated to user ({reason})"
