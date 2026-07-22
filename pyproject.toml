@@ -1,0 +1,38 @@
+[project]
+name = "kaptn"
+version = "0.1.0"
+description = "Remote command and control for AI coding assistants"
+requires-python = ">=3.12"
+dependencies = [
+    "websockets>=13.0",
+    "click>=8.1",
+    "pydantic>=2.0",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+kaptn = "bridge.main:cli"
+kaptn-claude-hook = "bridge.claude.hook_client:entry"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.setuptools.packages.find]
+include = ["bridge*"]
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"

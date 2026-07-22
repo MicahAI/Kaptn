@@ -1,0 +1,75 @@
+{
+  "mode": "local",
+  "cdp_port": 9222,
+  "bridge_port": 3001,
+  "ide": "windsurf",
+  "audit_db": "kaptn_audit.db",
+  "poll_intervals": {
+    "messages": 2.0,
+    "approvals": 1.0,
+    "status": 5.0
+  },
+  "autopilot": {
+    "enabled": true,
+    "rules": [
+      {
+        "id": "allow-file-reads",
+        "category": "file_read",
+        "action": "approve"
+      },
+      {
+        "id": "allow-file-writes",
+        "category": "file_write",
+        "action": "approve",
+        "limits": {
+          "max_per_session": 50
+        }
+      },
+      {
+        "id": "block-file-deletes",
+        "category": "file_delete",
+        "action": "deny"
+      },
+      {
+        "id": "allow-safe-commands",
+        "category": "command_safe",
+        "action": "approve",
+        "limits": {
+          "max_per_session": 100
+        }
+      },
+      {
+        "id": "allow-unsafe-commands",
+        "category": "command_unsafe",
+        "action": "approve",
+        "limits": {
+          "max_per_session": 20
+        }
+      },
+      {
+        "id": "allow-search",
+        "category": "search",
+        "action": "approve"
+      },
+      {
+        "id": "escalate-unknown",
+        "category": "unknown",
+        "action": "escalate"
+      }
+    ],
+    "loop_detection": {
+      "enabled": true,
+      "same_action_threshold": 20,
+      "oscillation_threshold": 3,
+      "history_size": 20
+    },
+    "default_watch_minutes": 20,
+    "reset_on_manual_approve": true
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "console",
+    "file": null,
+    "per_module": {}
+  }
+}
