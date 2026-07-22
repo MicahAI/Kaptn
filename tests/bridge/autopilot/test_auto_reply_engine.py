@@ -1,8 +1,6 @@
 """Tests for AutoReplyEngine — conversational stall detection and auto-reply."""
 
-import time
 
-import pytest
 
 from bridge.autopilot.auto_reply_engine import AutoReplyEngine, DEFAULT_AUTO_REPLY_RULES
 from bridge.autopilot.auto_reply_rule import AutoReplyRule

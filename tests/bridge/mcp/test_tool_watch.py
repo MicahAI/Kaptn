@@ -2,7 +2,6 @@
 
 from bridge.mcp import _progress
 from bridge.mcp.tools.tool_watch import kaptn_watch
-from tests.bridge.mcp.conftest import fake_bridge_progress
 
 
 class TestKaptnWatch:

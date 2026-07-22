@@ -1,12 +1,10 @@
 """Tests for TempRuleManager — temporary rules with TTL."""
 
 import time
-from unittest.mock import patch
 
 import pytest
 
 from bridge.autopilot.temp_rule_manager import (
-    DEFAULT_EXCLUDED_CATEGORIES,
     MAX_CONCURRENT_RULES,
     MAX_TTL_MINUTES,
     TempRule,

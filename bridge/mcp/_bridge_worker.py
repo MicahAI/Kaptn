@@ -13,7 +13,6 @@ Usage:
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import signal
@@ -23,7 +22,6 @@ from pathlib import Path
 
 from bridge.mcp._progress import (
     clear_commands,
-    clear_progress,
     read_commands,
     write_progress,
 )

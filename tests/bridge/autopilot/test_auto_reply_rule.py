@@ -1,6 +1,5 @@
 """Tests for AutoReplyRule — pattern matching for conversational stalls."""
 
-import pytest
 
 from bridge.autopilot.auto_reply_rule import AutoReplyRule
 

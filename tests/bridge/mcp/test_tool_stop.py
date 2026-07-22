@@ -41,7 +41,6 @@ class TestKaptnStop:
 
     def test_disconnect_kills_bridge(self, setup_mcp_test_env):
         # Use current PID so is_bridge_running returns True but we mock the kill
-        import os
         from unittest.mock import patch
         fake_bridge_progress(pid=99999)
         with patch("os.kill") as mock_kill:

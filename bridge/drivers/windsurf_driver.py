@@ -317,7 +317,7 @@ class WindsurfDriver(IDEDriver):
             });
             if (banner) { banner.click(); return true; }
             return false;
-        })()""";
+        })()"""
         result = await self.evaluator.evaluate(expression)
         if result:
             logger.info("Clicked approval banner to navigate")

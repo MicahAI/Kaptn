@@ -1,13 +1,11 @@
 """Tests for windsurf_setup — detect and configure CDP in argv.json."""
 
-import json
 import pytest
 
 from bridge.setup.windsurf_setup import (
     _read_jsonc,
     check_cdp_configured,
     configure_cdp,
-    _get_argv_path,
 )
 
 

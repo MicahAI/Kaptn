@@ -1,6 +1,5 @@
 """Tests for kaptn_defaults_set MCP tool."""
 
-import json
 
 from bridge.mcp import _state
 from bridge.mcp.tools.tool_defaults_set import kaptn_defaults_set

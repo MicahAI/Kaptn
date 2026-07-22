@@ -77,7 +77,7 @@ class TestMessageLogger:
         ml.log_message("Kaptn", "user", "Do something", timestamp=ts3)
         ml.close()
 
-        lines = [l for l in open(path).readlines() if l.strip()]
+        lines = [line for line in open(path).readlines() if line.strip()]
         assert len(lines) == 3
         assert "USER: Hello" in lines[0]
         assert "CASCADE: Hi there!" in lines[1]
@@ -92,7 +92,7 @@ class TestMessageLogger:
         ml.log_message("Kaptn", "show_more", "click to expand")
         ml.close()
 
-        lines = [l for l in open(path).readlines() if l.strip()]
+        lines = [line for line in open(path).readlines() if line.strip()]
         assert len(lines) == 2
         assert "USER:" in lines[0]
         assert "CASCADE:" in lines[1]

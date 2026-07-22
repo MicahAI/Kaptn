@@ -1,10 +1,9 @@
 """Tests for kaptn_connect MCP tool."""
 
-import os
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-from bridge.mcp import _progress, _state
+from bridge.mcp import _progress
 from bridge.mcp.tools.tool_connect import kaptn_connect
 from tests.bridge.mcp.conftest import fake_bridge_progress
 

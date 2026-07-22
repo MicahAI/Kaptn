@@ -1,13 +1,8 @@
 """Tests for state seeding from audit DB and approval detection/deduplication."""
 
-import json
-import tempfile
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import patch
 
-import pytest
 
-from bridge.audit.audit_logger import AuditLogger
 from bridge.main import KaptnBridge
 from bridge.models import ApprovalAction, ApprovalCategory, ApprovalRequest, DecisionSource
 

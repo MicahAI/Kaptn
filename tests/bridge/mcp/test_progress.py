@@ -1,8 +1,6 @@
 """Tests for bridge/mcp/_progress.py — atomic JSON file helpers."""
 
-import json
 import os
-import time
 
 from bridge.mcp import _progress
 
