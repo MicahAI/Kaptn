@@ -103,7 +103,8 @@ class TestBuildReport:
         assert "AutoPilot ON, 1 rules" in text
         assert "⚪ CDP: no IDE on port 1" in text
         assert "allow-writes" in text
-        assert "1/5 used" in text
+        assert "top session 1/5" in text
+        assert "⚠" not in text  # nobody capped
         assert "abcdef12…: 1" in text
         assert "total decisions: 1" in text  # the hook event was audited
 
@@ -116,6 +117,36 @@ class TestBuildReport:
     def test_report_no_usage_yet(self, server, audit):
         lines = status_report.build_report(self.make_cfg(server.port), audit)
         assert "  no rule usage recorded yet" in lines
+
+    def test_capped_session_flagged(self):
+        live = {
+            "limit_status": {
+                "allow-writes": {
+                    "session_count": 7,
+                    "limits": {"max_per_session": 5},
+                    "scopes": {"session-A-very-long-id": 5, "session-B-very-long-id": 2},
+                },
+            },
+            "paused_windows": [],
+        }
+        text = "\n".join(status_report._usage_section(live))
+        assert "top session 5/5" in text
+        assert "⚠ capped: session-…" in text
+
+    def test_uncapped_rule_shows_total(self):
+        live = {
+            "limit_status": {
+                "allow-search": {
+                    "session_count": 9,
+                    "limits": {"max_per_minute": 30},
+                    "scopes": {"s1": 4, "s2": 5},
+                },
+            },
+            "paused_windows": ["claude:stuck"],
+        }
+        text = "\n".join(status_report._usage_section(live))
+        assert "9 used" in text
+        assert "paused windows: claude:stuck" in text
 
     def test_short_scope(self):
         assert status_report._short_scope("small") == "small"

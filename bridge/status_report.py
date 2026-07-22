@@ -142,12 +142,20 @@ def _usage_section(live: dict | None) -> list[str]:
         lines.append("  no rule usage recorded yet")
     for rule_id, stat in active.items():
         max_session = stat.get("limits", {}).get("max_per_session")
-        cap = f"/{max_session}" if max_session is not None else ""
         scopes = stat.get("scopes", {})
         scope_text = ", ".join(
             f"{_short_scope(scope)}: {count}" for scope, count in sorted(scopes.items())
         )
-        lines.append(f"  {rule_id:<24} {stat['session_count']}{cap} used   ({scope_text})")
+        if max_session is not None:
+            # The cap is per session — compare the busiest session, not the sum
+            top = max(scopes.values(), default=0)
+            usage = f"top session {top}/{max_session}"
+            capped = [_short_scope(s) for s, c in sorted(scopes.items()) if c >= max_session]
+            if capped:
+                usage += f" ⚠ capped: {', '.join(capped)}"
+        else:
+            usage = f"{stat['session_count']} used"
+        lines.append(f"  {rule_id:<24} {usage}   ({scope_text})")
 
     paused = live.get("paused_windows", [])
     lines.append(f"  paused windows: {', '.join(paused) if paused else 'none'}")
