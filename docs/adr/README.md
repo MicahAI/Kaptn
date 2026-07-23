@@ -19,7 +19,7 @@ so far. Fill in the Decision when we commit to building one.
 
 | # | Title | Status |
 |---|-------|--------|
-| [0001](0001-files-changed-and-diffs.md) | Files changed + diffs view | Proposed |
+| [0001](0001-files-changed-and-diffs.md) | Files changed + diffs view | Accepted — shipped in Claude-Kaptn 1.10.0 |
 | [0002](0002-session-story-and-activity.md) | Session story & live activity | Proposed |
 | [0003](0003-sensitive-and-external-actions.md) | Sensitive & external actions | Proposed |
 | [0004](0004-push-alerts.md) | Push alerts | Proposed |
@@ -27,5 +27,6 @@ so far. Fill in the Decision when we commit to building one.
 | [0006](0006-terminal-command-gating.md) | Terminal command gating | Proposed |
 | [0007](0007-os-level-enforcement.md) | OS-level enforcement | Proposed |
 | [0008](0008-audit-search-scaling.md) | Audit search scaling (FTS) | Proposed |
+| [0009](0009-ai-classification-escalation-tier.md) | AI classification escalation tier | Proposed |
 
 New ADRs start from [`template.md`](template.md).
