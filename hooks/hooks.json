@@ -1,0 +1,17 @@
+{
+  "description": "Kaptn AutoPilot — evaluates every tool call against your rules",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/kaptn-hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

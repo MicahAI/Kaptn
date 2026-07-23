@@ -10,8 +10,29 @@ Kaptn connects to your AI-powered IDE (Windsurf, VS Code, Cursor) via Chrome Dev
 - **Remote Monitor** — Watch AI conversations and status from your phone or another device
 - **Audit Log** — Every approval decision recorded with full context
 
-Both backends share one rule engine, one config, and one audit DB. See
-[docs/features/CLAUDE_CODE.md](docs/features/CLAUDE_CODE.md) for the Claude adapter:
+Both backends share one rule engine, one config, and one audit DB.
+
+## Install as a Claude Code plugin (recommended)
+
+Kaptn is a standard Claude Code plugin — its own marketplace, no venv, no
+daemon, no manual hook editing. In Claude Code:
+
+```
+/plugin marketplace add MicahAI/Kaptn
+/plugin install kaptn@kaptn
+```
+
+That's it. The plugin ships a PreToolUse hook (daemonless — per-session
+limits and loop state persist in SQLite under `~/.kaptn/`), a skill that
+teaches sessions how to drive Kaptn, and slash commands:
+`/kaptn:status`, `/kaptn:reset`, `/kaptn:log`. Rules live in
+`~/.kaptn/kaptn.config.json` (created with defaults on first run); config
+changes apply on the next tool call. Requires Python 3.10+ on PATH.
+
+## Daemon mode (advanced: Windsurf/CDP + live server)
+
+For the CDP/Windsurf side or a long-running server, see
+[docs/features/CLAUDE_CODE.md](docs/features/CLAUDE_CODE.md):
 
 ```bash
 kaptn claude install   # register the PreToolUse hook (once)

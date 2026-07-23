@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Kaptn control CLI for plugin (daemonless) mode — stdlib only.
+
+Usage:
+  kaptn-ctl status        Rules, live usage per session, audit summary
+  kaptn-ctl reset         Clear limits, loop history, and pauses
+  kaptn-ctl log [-n N]    Recent audit decisions
+
+Reads the same state the plugin hook writes (~/.kaptn/). No server, no
+venv required. The full `kaptn` CLI (daemon mode, Windsurf/CDP) lives in
+the project venv.
+"""
+import argparse
+import os
+import sys
+
+if sys.version_info < (3, 10):
+    print("kaptn-ctl requires Python 3.10+", file=sys.stderr)
+    sys.exit(1)
+
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PLUGIN_ROOT)
+
+
+def cmd_status() -> int:
+    from bridge.config.config_manager import ConfigManager
+    from bridge.standalone.runner import build_stack, config_path
+
+    adapter, engine, store, audit = build_stack()
+    try:
+        cfg = ConfigManager(str(config_path())).load()
+        autopilot = cfg.get("autopilot", {})
+        print("Kaptn (plugin mode)")
+        print(f"  config: {config_path()}")
+        print(f"  AutoPilot: {'ON' if autopilot.get('enabled') else 'OFF'}   "
+              f"rules: {len(autopilot.get('rules', []))}")
+        print("\n  Rules:")
+        for rule in autopilot.get("rules", []):
+            limits = "  ".join(f"{k}={v}" for k, v in rule.get("limits", {}).items())
+            print(f"    {rule.get('id', '?'):<24} {rule.get('category', '?'):<15} "
+                  f"{rule.get('action', '?'):<9} {limits}".rstrip())
+
+        status = engine.rule_evaluator.get_limit_status()
+        active = {rid: s for rid, s in status.items() if s.get("session_count")}
+        print("\n  Usage:")
+        if not active:
+            print("    no rule usage recorded yet")
+        for rule_id, stat in active.items():
+            cap = stat.get("limits", {}).get("max_per_session")
+            scopes = stat.get("scopes", {})
+            top = max(scopes.values(), default=0)
+            usage = f"top session {top}/{cap}" if cap else f"{stat['session_count']} used"
+            scope_text = ", ".join(
+                f"{s[:8]}…: {c}" if len(s) > 16 else f"{s}: {c}"
+                for s, c in sorted(scopes.items())
+            )
+            print(f"    {rule_id:<24} {usage}   ({scope_text})")
+        paused = store.get_paused()
+        print(f"    paused windows: {', '.join(sorted(paused)) if paused else 'none'}")
+
+        print(f"\n  Audit: {audit.get_count()} total decisions ({audit.db_path})")
+        return 0
+    finally:
+        audit.close()
+        store.close()
+
+
+def cmd_reset() -> int:
+    from bridge.standalone.runner import reset_state
+
+    reset_state()
+    print("✅ Kaptn reset — limits cleared, loop history cleared, pauses resumed.")
+    return 0
+
+
+def cmd_log(limit: int) -> int:
+    from bridge.standalone.runner import build_stack
+
+    adapter, engine, store, audit = build_stack()
+    try:
+        records = audit.get_recent(limit=limit)
+        print(f"Audit log (showing {len(records)} of {audit.get_count()}):")
+        for record in records:
+            print(f"  {record['timestamp'][:19]}  {record['decision']:>9}  "
+                  f"{record['category']:>15}  '{record['action_text'][:48]}'  "
+                  f"(rule={record['rule_id'] or 'none'})")
+        return 0
+    finally:
+        audit.close()
+        store.close()
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="kaptn-ctl", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("status")
+    sub.add_parser("reset")
+    log_parser = sub.add_parser("log")
+    log_parser.add_argument("-n", "--limit", type=int, default=20)
+    args = parser.parse_args(argv)
+
+    if args.command == "status":
+        return cmd_status()
+    if args.command == "reset":
+        return cmd_reset()
+    return cmd_log(args.limit)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

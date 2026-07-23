@@ -1,0 +1,16 @@
+{
+  "name": "kaptn",
+  "description": "Kaptn — AutoPilot for AI coding assistant tool approvals",
+  "owner": {
+    "name": "MicahAI"
+  },
+  "plugins": [
+    {
+      "name": "kaptn",
+      "source": "./",
+      "description": "Rule-based allow/deny/ask on every tool call, per-session limits, loop detection, and a full audit trail.",
+      "category": "Safety",
+      "keywords": ["approvals", "permissions", "autopilot", "audit"]
+    }
+  ]
+}

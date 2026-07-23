@@ -1,0 +1,13 @@
+{
+  "name": "kaptn",
+  "displayName": "Kaptn",
+  "version": "0.2.0",
+  "description": "AutoPilot for tool approvals — rule-based allow/deny/ask on every tool call, per-session limits, loop detection, and a full audit trail.",
+  "author": {
+    "name": "MicahAI",
+    "url": "https://github.com/MicahAI"
+  },
+  "repository": "https://github.com/MicahAI/Kaptn",
+  "license": "MIT",
+  "keywords": ["approvals", "permissions", "autopilot", "audit", "hooks", "safety"]
+}
