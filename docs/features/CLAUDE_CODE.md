@@ -71,6 +71,19 @@ kaptn claude uninstall          # remove the hook entry
 kaptn log                       # audit trail (shared with CDP decisions)
 ```
 
+## CLI from anywhere
+
+The `kaptn` CLI resolves its config so it works from any directory:
+`./kaptn.config.json` if present, else `$KAPTN_CONFIG`, else
+`~/.kaptn/kaptn.config.json` (symlink this to your real config). A
+relative `audit_db` resolves against the config file's real location, so
+`kaptn log`/`kaptn status` always find the right database. Put the CLI on
+PATH (e.g. `ln -s <kaptn>/.venv/bin/kaptn /opt/homebrew/bin/kaptn`) and
+sessions themselves can run it — read-only subcommands (`status`, `help`,
+`log`, `claude status`) classify as `command_safe`, so even a capped
+session can self-diagnose. To make sessions Kaptn-aware, add a short
+section to `~/.claude/CLAUDE.md` describing the commands.
+
 ## Limits are per session
 
 Rule limits (`max_per_session`) are scoped per Claude session id — every

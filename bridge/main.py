@@ -602,9 +602,11 @@ def help_command():
 @cli.command("log")
 @click.option("--limit", "-n", default=20, help="Number of records to show.")
 @click.option("--loops", is_flag=True, help="Show only loop detection events.")
-@click.option("--db", default="kaptn_audit.db", help="Audit database path.")
-def show_log(limit: int, loops: bool, db: str):
+@click.option("--db", default=None, help="Audit database path (default: from config).")
+def show_log(limit: int, loops: bool, db: str | None):
     """Show the audit log."""
+    if db is None:
+        db = ConfigManager().load().get("audit_db", "kaptn_audit.db")
     audit = AuditLogger(db_path=db)
 
     if loops:

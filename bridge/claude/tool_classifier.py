@@ -158,6 +158,8 @@ def _classify_segment(segment: str) -> ApprovalCategory:
         return _classify_git(tokens[1:], sudo)
     if cmd == "find":
         return _classify_find(tokens[1:], sudo)
+    if cmd == "kaptn":
+        return _classify_kaptn(tokens[1:], sudo)
     if sudo:
         return ApprovalCategory.COMMAND_UNSAFE
     if cmd in SAFE_COMMANDS:
@@ -186,6 +188,27 @@ def _classify_git(args: list[str], sudo: bool) -> ApprovalCategory:
     if sudo:
         return ApprovalCategory.COMMAND_UNSAFE
     if subcommand in SAFE_GIT_SUBCOMMANDS:
+        return ApprovalCategory.COMMAND_SAFE
+    return ApprovalCategory.COMMAND_UNSAFE
+
+
+def _classify_kaptn(args: list[str], sudo: bool) -> ApprovalCategory:
+    """Classify kaptn's own CLI: read-only subcommands are safe.
+
+    A capped session must still be able to run `kaptn status`/`help`/`log`
+    to self-diagnose — otherwise the cap locks the session out of the very
+    tool that explains the cap. State-changing subcommands (reset, stop,
+    start, install) stay unsafe so they follow the normal rules.
+    """
+    if sudo:
+        return ApprovalCategory.COMMAND_UNSAFE
+
+    subcommands = [t for t in args if not t.startswith("-")]
+    if not subcommands:
+        return ApprovalCategory.COMMAND_SAFE  # bare `kaptn` prints usage
+    if subcommands[0] in {"status", "help", "log"}:
+        return ApprovalCategory.COMMAND_SAFE
+    if subcommands[0] == "claude" and subcommands[1:2] == ["status"]:
         return ApprovalCategory.COMMAND_SAFE
     return ApprovalCategory.COMMAND_UNSAFE
 

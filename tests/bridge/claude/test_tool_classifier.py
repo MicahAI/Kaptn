@@ -126,6 +126,16 @@ class TestSegmentEdgeCases:
         # shlex.split raises on unbalanced quotes — falls back to str.split
         assert classify_command("echo 'unbalanced") == ApprovalCategory.COMMAND_SAFE
 
+    def test_kaptn_read_only_subcommands_safe(self):
+        for cmd in ("kaptn status", "kaptn help", "kaptn log -n 50",
+                    "kaptn status -c /x/kaptn.config.json", "kaptn claude status", "kaptn"):
+            assert classify_command(cmd) == ApprovalCategory.COMMAND_SAFE, cmd
+
+    def test_kaptn_state_changing_subcommands_unsafe(self):
+        for cmd in ("kaptn reset", "kaptn stop", "kaptn start",
+                    "kaptn claude install", "kaptn claude serve", "sudo kaptn status"):
+            assert classify_command(cmd) == ApprovalCategory.COMMAND_UNSAFE, cmd
+
     def test_find_variants(self):
         assert classify_command("find . -name '*.py'") == ApprovalCategory.COMMAND_SAFE
         assert classify_command("find . -delete") == ApprovalCategory.FILE_DELETE

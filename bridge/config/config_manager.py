@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -85,13 +86,46 @@ class ConfigManager:
     Merges user config file with defaults. Missing keys fall back to defaults.
     """
 
-    def __init__(self, config_path: str = "kaptn.config.json") -> None:
+    DEFAULT_PATH = "kaptn.config.json"
+
+    def __init__(self, config_path: str = DEFAULT_PATH) -> None:
         """Initialize the config manager.
 
         Args:
-            config_path: Path to the JSON config file.
+            config_path: Path to the JSON config file. When left at the
+                default, the path is resolved so the CLI works from any
+                directory (see _resolve_default).
         """
-        self.config_path = Path(config_path)
+        self.config_path = self._resolve_default(config_path)
+
+    @classmethod
+    def _resolve_default(cls, config_path: str) -> Path:
+        """Resolve the default config path so `kaptn` works from any cwd.
+
+        Explicit paths are used as-is. For the bare default, resolution
+        order is: ./kaptn.config.json if present, then $KAPTN_CONFIG,
+        then ~/.kaptn/kaptn.config.json if present, else the cwd default
+        (original behavior).
+
+        Args:
+            config_path: The path passed to the constructor.
+
+        Returns:
+            The resolved Path.
+        """
+        path = Path(config_path)
+        if config_path != cls.DEFAULT_PATH or path.exists():
+            return path
+
+        env_path = os.environ.get("KAPTN_CONFIG")
+        if env_path:
+            return Path(env_path)
+
+        home_path = Path.home() / ".kaptn" / "kaptn.config.json"
+        if home_path.exists():
+            return home_path
+
+        return path
 
     def load(self) -> dict:
         """Load config from file, merged with defaults.
@@ -115,7 +149,20 @@ class ConfigManager:
             return dict(DEFAULT_CONFIG)
 
         merged = self._deep_merge(dict(DEFAULT_CONFIG), user_config)
+        self._absolutize_audit_db(merged)
         return merged
+
+    def _absolutize_audit_db(self, config: dict) -> None:
+        """Resolve a relative audit_db path against the config file's directory.
+
+        Keeps `kaptn log`/`kaptn status` pointed at the real audit DB no
+        matter which directory the CLI runs from.
+        """
+        audit_db = config.get("audit_db")
+        if audit_db and audit_db != ":memory:" and not Path(audit_db).is_absolute():
+            # resolve() the file first so a symlinked config (e.g.
+            # ~/.kaptn/kaptn.config.json) anchors to its real directory
+            config["audit_db"] = str(self.config_path.resolve().parent / audit_db)
 
     def save(self, config: dict) -> bool:
         """Write config dict back to disk.

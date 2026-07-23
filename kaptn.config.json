@@ -22,7 +22,7 @@
         "category": "file_write",
         "action": "approve",
         "limits": {
-          "max_per_session": 50
+          "max_per_session": 1000
         }
       },
       {
@@ -35,7 +35,7 @@
         "category": "command_safe",
         "action": "approve",
         "limits": {
-          "max_per_session": 100
+          "max_per_session": 1000
         }
       },
       {
@@ -43,7 +43,7 @@
         "category": "command_unsafe",
         "action": "approve",
         "limits": {
-          "max_per_session": 20
+          "max_per_session": 1000
         }
       },
       {
