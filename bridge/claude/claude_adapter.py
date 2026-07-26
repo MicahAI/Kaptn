@@ -83,6 +83,9 @@ class ClaudeAdapter:
             "session_id": session_id,
             "cwd": cwd,
             "type": "claude_hook",
+            # permission_mode governs whether an "ask" actually prompts the
+            # user — bypassPermissions means it does not.
+            "permission_mode": str(event.get("permission_mode", "")),
         })
 
         request = ApprovalRequest(
@@ -111,12 +114,27 @@ class ClaudeAdapter:
             and rule_id is not None
             and not self._matched_rule(rule_id).get("hard_deny", False)
         )
+        # An "ask" only protects if Claude Code will actually prompt.
+        # bypassPermissions suppresses the prompt, so a pending escalation
+        # would fail open — the tool would just run. Any would-be "ask"
+        # (escalate or soft deny) fails closed to a hard deny there.
+        wants_ask = action == ApprovalAction.ESCALATE or soft_deny
+        fail_closed = (
+            wants_ask and details["permission_mode"] == "bypassPermissions"
+        )
 
-        if self.escalation and (action == ApprovalAction.ESCALATE or soft_deny):
+        if self.escalation and wants_ask:
             esc_reason = f"deny_recommended:{reason}" if soft_deny else reason
+            if fail_closed:
+                esc_reason = f"bypass_fail_closed:{esc_reason}"
             self.escalation.escalate(request, esc_reason, rule_id)
 
-        decision = "ask" if soft_deny else _DECISION_MAP[action]
+        if fail_closed:
+            decision = "deny"
+        elif soft_deny:
+            decision = "ask"
+        else:
+            decision = _DECISION_MAP[action]
         logger.info(
             "[%s] Claude %s: %s '%s' (rule=%s, reason=%s)",
             window, decision.upper(), category.value, action_text[:60], rule_id, reason,
@@ -126,7 +144,8 @@ class ClaudeAdapter:
                 "hookEventName": "PreToolUse",
                 "permissionDecision": decision,
                 "permissionDecisionReason": self._reason_text(
-                    action, rule_id, reason, soft_deny=soft_deny
+                    action, rule_id, reason,
+                    soft_deny=soft_deny, fail_closed=fail_closed,
                 ),
             }
         }
@@ -172,10 +191,17 @@ class ClaudeAdapter:
     @staticmethod
     def _reason_text(
         action: ApprovalAction, rule_id: str | None, reason: str,
-        soft_deny: bool = False,
+        soft_deny: bool = False, fail_closed: bool = False,
     ) -> str:
         """Build the human/model-facing explanation for a decision."""
         rule_part = f"rule={rule_id}" if rule_id else "no rule"
+        if fail_closed:
+            return (
+                f"Kaptn escalated ({rule_part}, {reason}), but this session "
+                "bypasses permission prompts, so the escalation fails closed "
+                "— get explicit approval from the user (e.g. AskUserQuestion) "
+                "and retry, or rerun without bypassPermissions"
+            )
         if action == ApprovalAction.APPROVE:
             return f"Kaptn AutoPilot approved ({rule_part})"
         if action == ApprovalAction.DENY:

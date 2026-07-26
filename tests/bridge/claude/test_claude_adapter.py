@@ -101,6 +101,53 @@ class TestDecisions:
         assert "limit_exceeded" in output["permissionDecisionReason"]
 
 
+class TestBypassFailClosed:
+    """bypassPermissions suppresses Claude Code's prompt, so any would-be
+    'ask' must fail closed to 'deny' — never open (incident 2026-07-23:
+    an escalated SendUserFile ran anyway while the escalation sat pending).
+    """
+
+    @staticmethod
+    def bypass(event):
+        event["permission_mode"] = "bypassPermissions"
+        return event
+
+    def test_escalate_fails_closed_under_bypass(self, adapter):
+        result = adapter.handle_hook_event(
+            self.bypass(make_event("Bash", {"command": "npm install"}))
+        )
+        output = result["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert "fails closed" in output["permissionDecisionReason"]
+        assert "bypasses permission prompts" in output["permissionDecisionReason"]
+
+    def test_soft_deny_fails_closed_under_bypass(self, adapter):
+        result = adapter.handle_hook_event(
+            self.bypass(make_event("Bash", {"command": "rm -rf build"}))
+        )
+        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_bypass_fail_closed_notifies_escalation_handler(self, adapter):
+        adapter.handle_hook_event(
+            self.bypass(make_event("Bash", {"command": "npm install"}))
+        )
+        pending = adapter.escalation.get_pending()
+        assert len(pending) == 1
+        assert pending[0].reason.startswith("bypass_fail_closed:")
+
+    def test_approve_unaffected_by_bypass(self, adapter):
+        result = adapter.handle_hook_event(self.bypass(make_event("Read")))
+        assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_other_modes_still_ask(self, adapter):
+        for mode in ("default", "acceptEdits", "plan", ""):
+            # distinct commands so loop detection never trips
+            event = make_event("Bash", {"command": f"npm install pkg-{mode}"})
+            event["permission_mode"] = mode
+            result = adapter.handle_hook_event(event)
+            assert result["hookSpecificOutput"]["permissionDecision"] == "ask", mode
+
+
 class TestEventFiltering:
     def test_non_pretooluse_ignored(self, adapter):
         assert adapter.handle_hook_event(make_event(event_name="PostToolUse")) is None
