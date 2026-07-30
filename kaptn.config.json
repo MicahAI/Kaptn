@@ -4,6 +4,12 @@
   "bridge_port": 3001,
   "ide": "windsurf",
   "audit_db": "kaptn_audit.db",
+  "claude": {
+    "enabled": true,
+    "hook_port": 3002,
+    "launchd_label": "com.micahai.kaptn.claude",
+    "answer_budget_seconds": 5
+  },
   "poll_intervals": {
     "messages": 2.0,
     "approvals": 1.0,

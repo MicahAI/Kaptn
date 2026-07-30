@@ -145,7 +145,12 @@ agent returns at next login, or immediately via `launchctl bootstrap`.
 Config lives under the `claude` key in `kaptn.config.json`:
 
 ```json
-"claude": { "enabled": true, "hook_port": 3002, "answer_budget_seconds": 5 }
+"claude": {
+  "enabled": true,
+  "hook_port": 3002,
+  "launchd_label": "com.micahai.kaptn.claude",
+  "answer_budget_seconds": 5
+}
 ```
 
 Audit records from Claude sessions use `mode="claude"`, window name

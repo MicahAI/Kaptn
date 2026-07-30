@@ -5,6 +5,8 @@ import logging
 import os
 from pathlib import Path
 
+from bridge.claude.hook_guard import DEFAULT_ANSWER_BUDGET_SECONDS
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
@@ -17,6 +19,11 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "hook_port": 3002,
         "launchd_label": "com.micahai.kaptn.claude",
+        # Longest the hook client may take to answer. The registered hook
+        # timeout must clear a margin over it, or the hook can be killed
+        # mid-answer — and a killed PreToolUse hook abstains, which fails
+        # open. null = unbounded hold (ADR-0012). See bridge/claude/hook_guard.py.
+        "answer_budget_seconds": DEFAULT_ANSWER_BUDGET_SECONDS,
     },
     "poll_intervals": {
         "messages": 2.0,

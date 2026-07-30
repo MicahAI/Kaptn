@@ -68,3 +68,38 @@ class TestAuditDbResolution:
         config = tmp_path / "kaptn.config.json"
         config.write_text(json.dumps({"audit_db": ":memory:"}))
         assert ConfigManager(str(config)).load()["audit_db"] == ":memory:"
+
+
+class TestClaudeDefaults:
+    """The hook-governor knobs must be discoverable from config, not only code."""
+
+    def test_answer_budget_is_a_documented_default(self):
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        assert "answer_budget_seconds" in DEFAULT_CONFIG["claude"]
+
+    def test_default_matches_what_the_client_actually_uses(self):
+        from bridge.claude.hook_client import DEFAULT_TIMEOUT_SECONDS
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        assert DEFAULT_CONFIG["claude"]["answer_budget_seconds"] == DEFAULT_TIMEOUT_SECONDS
+
+    def test_guard_resolves_the_shipped_default(self):
+        from bridge.claude.hook_guard import required_timeout, resolve_answer_budget
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        budget = resolve_answer_budget(DEFAULT_CONFIG["claude"])
+        assert budget == 5.0
+        assert required_timeout(budget) == 10.0  # the timeout install registers
+
+    def test_null_budget_survives_the_merge_as_an_unbounded_hold(self, tmp_path):
+        import json
+
+        from bridge.claude.hook_guard import resolve_answer_budget
+        from bridge.config.config_manager import ConfigManager
+
+        path = tmp_path / "kaptn.config.json"
+        path.write_text(json.dumps({"claude": {"answer_budget_seconds": None}}))
+        cfg = ConfigManager(str(path)).load()
+        assert resolve_answer_budget(cfg["claude"]) is None
+        assert cfg["claude"]["hook_port"] == 3002  # other defaults still merged
