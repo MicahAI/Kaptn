@@ -9,11 +9,11 @@ from bridge.claude.hook_guard import DEFAULT_ANSWER_BUDGET_SECONDS
 
 logger = logging.getLogger(__name__)
 
+#: Every key here is read by the code. Keys the code never reads do not
+#: belong in the defaults — a knob that does nothing is worse than an
+#: undocumented one. See docs/features/CONFIG_REFERENCE.md.
 DEFAULT_CONFIG = {
-    "mode": "local",
     "cdp_port": 9222,
-    "bridge_port": 3001,
-    "ide": "windsurf",
     "audit_db": "kaptn_audit.db",
     "claude": {
         "enabled": True,
@@ -26,12 +26,15 @@ DEFAULT_CONFIG = {
         "answer_budget_seconds": DEFAULT_ANSWER_BUDGET_SECONDS,
     },
     "poll_intervals": {
-        "messages": 2.0,
         "approvals": 1.0,
-        "status": 5.0,
     },
     "autopilot": {
         "enabled": True,
+        "reset_on_manual_approve": True,
+        "default_watch_minutes": 20,
+        "auto_reply_rules": None,  # null = the built-in AutoReplyEngine rules
+        "auto_reply_cooldown_seconds": 10.0,
+        "auto_reply_max_consecutive": 5,
         "rules": [
             {
                 "id": "allow-file-reads",

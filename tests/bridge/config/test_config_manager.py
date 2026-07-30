@@ -103,3 +103,35 @@ class TestClaudeDefaults:
         cfg = ConfigManager(str(path)).load()
         assert resolve_answer_budget(cfg["claude"]) is None
         assert cfg["claude"]["hook_port"] == 3002  # other defaults still merged
+
+
+class TestDefaultsMatchWhatTheCodeReads:
+    """Defaults must be reconcilable with the code — no dead knobs, no hidden ones."""
+
+    def test_autopilot_knobs_are_all_present(self):
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        autopilot = DEFAULT_CONFIG["autopilot"]
+        for key in ("enabled", "reset_on_manual_approve", "default_watch_minutes",
+                    "auto_reply_rules", "auto_reply_cooldown_seconds",
+                    "auto_reply_max_consecutive", "rules", "loop_detection"):
+            assert key in autopilot, f"{key} is read by the code but absent from defaults"
+
+    def test_unread_keys_are_gone(self):
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        # Nothing reads these; shipping them implied they did something.
+        for key in ("mode", "ide", "bridge_port"):
+            assert key not in DEFAULT_CONFIG
+        assert set(DEFAULT_CONFIG["poll_intervals"]) == {"approvals"}
+
+    def test_shipped_config_file_agrees(self):
+        import json
+        from pathlib import Path
+
+        from bridge.config.config_manager import DEFAULT_CONFIG
+
+        shipped = json.loads((Path(__file__).parents[3] / "kaptn.config.json").read_text())
+        for key in ("mode", "ide", "bridge_port"):
+            assert key not in shipped
+        assert set(shipped["poll_intervals"]) <= set(DEFAULT_CONFIG["poll_intervals"])

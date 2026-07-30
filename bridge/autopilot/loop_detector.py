@@ -21,6 +21,7 @@ class LoopDetector:
         same_action_threshold: int = 3,
         oscillation_threshold: int = 3,
         history_size: int = 20,
+        enabled: bool = True,
     ) -> None:
         """Initialize the loop detector.
 
@@ -28,10 +29,14 @@ class LoopDetector:
             same_action_threshold: Number of identical consecutive actions to flag as a loop.
             oscillation_threshold: Number of A→B alternations to flag as a loop.
             history_size: Maximum number of recent actions to track.
+            enabled: When False, check() never reports a loop. History is
+                still recorded so `kaptn status` stays truthful and toggling
+                back on does not start from a blank slate.
         """
         self.same_action_threshold = same_action_threshold
         self.oscillation_threshold = oscillation_threshold
         self.history_size = history_size
+        self.enabled = enabled
         self._history: deque[str] = deque(maxlen=history_size)
 
     def check(self, request: ApprovalRequest) -> bool:
@@ -44,8 +49,12 @@ class LoopDetector:
             request: The approval request to check.
 
         Returns:
-            True if a loop is detected, False otherwise.
+            True if a loop is detected, False otherwise. Always False when
+            the detector is disabled.
         """
+        if not self.enabled:
+            return False
+
         action_key = self._make_key(request)
 
         # Check same-action repetition

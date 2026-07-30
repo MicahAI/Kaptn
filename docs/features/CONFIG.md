@@ -5,6 +5,11 @@
 **Parent**: [DESIGN.md](../DESIGN.md) Section 10
 **Related**: [AUTOPILOT.md](AUTOPILOT.md) (rules, limits, loop detection), [MCPServer.md](../MCPServer.md) (MCP tools)
 
+> ⚠️ **This is a design document, not a reference.** Parts of it were never
+> built — §5 in full, and several keys in §2.1/§2.2. For what the code
+> actually reads today, see **[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)**,
+> which wins wherever the two disagree.
+
 ---
 
 ## 1. Overview
@@ -32,6 +37,11 @@ Each layer narrows or overrides the one above. Static config is the foundation; 
 ## 2. Config File Structure
 
 ### 2.1 Full Schema
+
+> **Not current.** `mode`, `bridge_port`, `ide`, and the `messages`/`status`
+> poll intervals were removed on 2026-07-30 — nothing ever read them. The
+> `claude` section is missing here entirely. See
+> [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for the real schema.
 
 ```json
 {
@@ -150,6 +160,10 @@ Prevents the AI from getting stuck repeating the same action.
 ---
 
 ## 5. Per-Window Overrides
+
+> 🚧 **Not implemented.** Nothing in the codebase reads `windows`,
+> `autopilot_profile`, or `mode_overrides`, and the profiles below do not
+> exist. This section is a design sketch — setting any of it has no effect.
 
 Global defaults apply to all IDE windows. Per-window overrides let you assign different profiles or rules per workspace.
 

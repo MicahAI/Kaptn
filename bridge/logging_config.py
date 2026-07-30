@@ -94,3 +94,20 @@ def setup_logging(
         for module_name, module_level in per_module.items():
             module_logger = logging.getLogger(module_name)
             module_logger.setLevel(getattr(logging, module_level.upper(), logging.INFO))
+
+
+def setup_logging_from_config(config: dict, level: str | None = None) -> None:
+    """Configure logging from a loaded config's `logging` section.
+
+    Args:
+        config: The merged config dict.
+        level: CLI override. When given it wins over `logging.level`;
+            when None the config value (else INFO) applies.
+    """
+    log_config = config.get("logging") or {}
+    setup_logging(
+        level=level or log_config.get("level") or "INFO",
+        log_format=log_config.get("format", "console"),
+        log_file=log_config.get("file"),
+        per_module=log_config.get("per_module"),
+    )

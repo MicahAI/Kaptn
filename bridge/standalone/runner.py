@@ -130,6 +130,7 @@ def build_stack(state_dir: Path | None = None):
         same_action_threshold=loop_cfg.get("same_action_threshold", 3),
         oscillation_threshold=loop_cfg.get("oscillation_threshold", 3),
         history_size=loop_cfg.get("history_size", 20),
+        enabled=loop_cfg.get("enabled", True),
     )
     engine = AutoPilotEngine(
         rule_evaluator=evaluator,

@@ -191,7 +191,7 @@ View current AutoPilot configuration: rules, poll intervals, loop detection sett
 ```json
 {
   "rules": [ { "id": "...", "category": "...", "action": "...", "limits": {}, "conditions": {} } ],
-  "poll_intervals": { "approvals_seconds": 1.0, "messages_seconds": 2.0, "status_seconds": 5.0 },
+  "poll_intervals": { "approvals_seconds": 1.0 },
   "autopilot_enabled": true,
   "default_watch_minutes": 20,
   "reset_on_manual_approve": true,

@@ -142,3 +142,31 @@ class TestLoopDetector:
 
         # 4 in history + 1 current = 5, triggers loop
         assert detector.check(req) is True
+
+
+class TestEnabledFlag:
+    """`autopilot.loop_detection.enabled` used to be config that did nothing."""
+
+    def _make_request(self, action: str = "Edit main.py",
+                      category: str = "file_write") -> ApprovalRequest:
+        return ApprovalRequest(category=ApprovalCategory(category), action=action)
+
+    def _trip_same_action(self, detector: LoopDetector) -> bool:
+        """Repeat one action up to the threshold and report the verdict."""
+        for _ in range(detector.same_action_threshold - 1):
+            detector.record(self._make_request())
+        return detector.check(self._make_request())
+
+    def test_enabled_by_default(self):
+        assert LoopDetector().enabled is True
+        assert self._trip_same_action(LoopDetector()) is True
+
+    def test_disabled_never_reports_a_loop(self):
+        assert self._trip_same_action(LoopDetector(enabled=False)) is False
+
+    def test_disabled_still_records_history(self):
+        # History keeps flowing so `kaptn status` stays truthful and
+        # re-enabling does not start from a blank slate.
+        detector = LoopDetector(enabled=False)
+        detector.record(self._make_request())
+        assert len(detector.history) == 1

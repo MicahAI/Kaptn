@@ -17,7 +17,7 @@ from bridge.claude.claude_setup import (
 from bridge.claude.hook_guard import HookGuardError
 from bridge.claude.hook_server import DEFAULT_HOOK_PORT
 from bridge.config.config_manager import ConfigManager
-from bridge.logging_config import setup_logging
+from bridge.logging_config import setup_logging, setup_logging_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +47,14 @@ def _echo_findings(findings: list) -> None:
 
 @claude_group.command("serve")
 @click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
-@click.option("--log-level", "-l", default="INFO", help="Log level.")
-def serve(config: str, log_level: str):
+@click.option("--log-level", "-l", default=None,
+              help="Log level. Overrides logging.level.")
+def serve(config: str, log_level: str | None):
     """Run the Kaptn hook server standalone (Claude Code only, no CDP)."""
-    setup_logging(level=log_level)
     from bridge.main import KaptnBridge  # deferred — avoids circular import
 
     cfg = ConfigManager(config).load()
+    setup_logging_from_config(cfg, log_level)
     cfg.setdefault("claude", {})["enabled"] = True
     bridge = KaptnBridge(cfg)
 

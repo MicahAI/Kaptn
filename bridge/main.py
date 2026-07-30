@@ -26,7 +26,7 @@ from bridge.claude.cli import claude_group
 from bridge.claude.hook_server import ClaudeHookServer
 from bridge.config.config_manager import ConfigManager
 from bridge.drivers.windsurf_driver import WindsurfDriver
-from bridge.logging_config import setup_logging
+from bridge.logging_config import setup_logging, setup_logging_from_config
 from bridge.logging.message_logger import MessageLogger
 from bridge.models import ApprovalAction, ApprovalCategory, ApprovalRequest, AuditRecord, DecisionSource
 
@@ -65,6 +65,7 @@ class KaptnBridge:
                 same_action_threshold=loop_config.get("same_action_threshold", 3),
                 oscillation_threshold=loop_config.get("oscillation_threshold", 3),
                 history_size=loop_config.get("history_size", 20),
+                enabled=loop_config.get("enabled", True),
             ),
             enabled=autopilot_config.get("enabled", True),
         )
@@ -505,13 +506,13 @@ def cli():
 
 @cli.command()
 @click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
-@click.option("--log-level", "-l", default="INFO", help="Log level (DEBUG, INFO, WARNING, ERROR).")
-def start(config: str, log_level: str):
+@click.option("--log-level", "-l", default=None,
+              help="Log level (DEBUG, INFO, WARNING, ERROR). Overrides logging.level.")
+def start(config: str, log_level: str | None):
     """Start the Kaptn bridge and begin monitoring."""
-    setup_logging(level=log_level)
-
     config_manager = ConfigManager(config)
     cfg = config_manager.load()
+    setup_logging_from_config(cfg, log_level)
 
     bridge = KaptnBridge(cfg)
 
@@ -676,21 +677,21 @@ def mcp_group():
 
 @mcp_group.command("start")
 @click.option("--config", "-c", default="kaptn.config.json", help="Config file path.")
-@click.option("--log-level", "-l", default="INFO", help="Log level.")
+@click.option("--log-level", "-l", default=None,
+              help="Log level. Overrides logging.level.")
 @click.option("--no-connect", is_flag=True, help="Don't auto-connect bridge on startup.")
-def mcp_start(config: str, log_level: str, no_connect: bool):
+def mcp_start(config: str, log_level: str | None, no_connect: bool):
     """Start the Kaptn MCP server (stdio transport).
 
     The bridge runs as a separate subprocess that connects to the IDE via CDP.
     By default, the bridge auto-connects on startup.
     """
-    setup_logging(level=log_level)
-
     import os
     from bridge.mcp.mcp_server import create_kaptn_mcp_server, mcp as mcp_instance
 
     config_path = os.path.abspath(config)
     config_manager = ConfigManager(config_path)
+    setup_logging_from_config(config_manager.load(), log_level)
 
     create_kaptn_mcp_server(
         config_path=config_path,

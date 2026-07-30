@@ -18,8 +18,12 @@ class TestKaptnDefaults:
     def test_defaults_shows_poll_intervals(self, setup_mcp_test_env):
         result = kaptn_defaults()
         assert result["poll_intervals"]["approvals_seconds"] == 1.0
-        assert result["poll_intervals"]["messages_seconds"] == 2.0
-        assert result["poll_intervals"]["status_seconds"] == 5.0
+
+    def test_defaults_omits_unread_poll_intervals(self, setup_mcp_test_env):
+        # `messages`/`status` are not read by the bridge; reporting them
+        # implied they were settable.
+        result = kaptn_defaults()
+        assert set(result["poll_intervals"]) == {"approvals_seconds"}
 
     def test_defaults_shows_settings(self, setup_mcp_test_env):
         result = kaptn_defaults()

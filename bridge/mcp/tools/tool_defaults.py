@@ -28,10 +28,10 @@ def kaptn_defaults() -> dict:
         })
 
     return {
+        # Only `approvals` is read by the bridge; reporting intervals that
+        # nothing honors implied they were settable.
         "poll_intervals": {
             "approvals_seconds": poll.get("approvals", 1.0),
-            "messages_seconds": poll.get("messages", 2.0),
-            "status_seconds": poll.get("status", 5.0),
         },
         "autopilot_enabled": autopilot.get("enabled", True),
         "default_watch_minutes": autopilot.get("default_watch_minutes", 20),

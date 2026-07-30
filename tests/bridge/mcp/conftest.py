@@ -27,7 +27,7 @@ TEST_RULES = [
 ]
 
 TEST_CONFIG = {
-    "poll_intervals": {"approvals": 1.0, "messages": 2.0, "status": 5.0},
+    "poll_intervals": {"approvals": 1.0},
     "autopilot": {
         "enabled": True,
         "reset_on_manual_approve": True,
