@@ -20,6 +20,7 @@ from bridge.cdp.cdp_connection import CdpConnection
 from bridge.cdp.cdp_discovery import CdpDiscovery
 from bridge.cdp.cdp_evaluator import CdpEvaluator
 from bridge import lifecycle
+from bridge.claude import hook_guard
 from bridge.claude.claude_adapter import ClaudeAdapter
 from bridge.claude.cli import claude_group
 from bridge.claude.hook_server import ClaudeHookServer
@@ -112,11 +113,21 @@ class KaptnBridge:
     def _start_hook_server(self) -> bool:
         """Start the Claude hook server if configured.
 
+        Runs the hook-guard self-check first. If Kaptn's own gating hook is
+        registered async or under-margined it cannot gate anything, so the
+        server refuses to start: the hook client then fails open to Claude
+        Code's own permission prompts rather than to silent execution.
+
         Returns:
             True if the hook server is running.
         """
         if not self.hook_server:
             return False
+
+        if not self.hook_guard_self_check():
+            self.hook_server = None
+            return False
+
         try:
             self.hook_server.start()
         except OSError:
@@ -127,6 +138,31 @@ class KaptnBridge:
             self.hook_server = None
             return False
         return True
+
+    def hook_guard_self_check(self) -> bool:
+        """Audit every effective PreToolUse hook before serving decisions.
+
+        Returns:
+            True if it is safe to serve — no fatal finding against Kaptn's own
+            gating hook. Third-party findings are logged and tolerated.
+        """
+        claude_config = self.config.get("claude", {})
+        findings = hook_guard.startup_self_check(
+            answer_budget=hook_guard.resolve_answer_budget(claude_config),
+            log=logger,
+        )
+        fatal = [f for f in findings if f.fatal]
+        if not fatal:
+            return True
+
+        logger.error(
+            "Refusing to start the Claude hook server: Kaptn's own gating hook "
+            "cannot enforce anything as configured (%d problem(s) above). "
+            "Re-run 'kaptn claude install' to rewrite a valid entry. Until then "
+            "Claude Code's own permission prompts are in charge.",
+            len(fatal),
+        )
+        return False
 
     async def _connect_cdp(self) -> bool:
         """Discover and connect to IDE windows over CDP.

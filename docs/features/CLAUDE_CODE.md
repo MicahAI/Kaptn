@@ -67,6 +67,7 @@ kaptn start                     # CDP bridge + Claude hook server together
 kaptn stop                      # stop everything (launchd agent + manual instances)
 kaptn reset                     # clear rule limits / loop history / pauses on the running server
 kaptn claude status             # is the hook server up?
+kaptn claude check              # can the registered hooks actually gate?
 kaptn claude uninstall          # remove the hook entry
 kaptn log                       # audit trail (shared with CDP decisions)
 ```
@@ -83,6 +84,46 @@ sessions themselves can run it — read-only subcommands (`status`, `help`,
 `log`, `claude status`) classify as `command_safe`, so even a capped
 session can self-diagnose. To make sessions Kaptn-aware, add a short
 section to `~/.claude/CLAUDE.md` describing the commands.
+
+## The hook must be able to gate (silent-ungating guards)
+
+Two hook configurations disable enforcement while the governor still looks
+healthy in logs. Both were confirmed with controls against Claude Code
+2.1.220 on 2026-07-29 (ADR-0012); `bridge/claude/hook_guard.py` now refuses
+them.
+
+- **`"async": true` (or `"asyncRewake": true`) on the PreToolUse hook** —
+  the hook is backgrounded and *forfeits its permission vote*; the tool
+  proceeds through the normal permission flow, ungated. `kaptn claude
+  install` will not write such an entry. The ban is scoped to PreToolUse:
+  `asyncRewake` on a **Stop** hook is legitimate and stays allowed (it is
+  the mechanism ADR-0012 uses to wake an idle session).
+- **A timeout that can kill the hook mid-answer** — a killed PreToolUse
+  hook is an *abstaining* hook: its vote is discarded and the call resolves
+  through the remaining hooks and permission rules, i.e. fail-open. So the
+  registered timeout must clear a margin over the longest answer the hook
+  client can produce: `max(2 × budget, budget + 5s)`. With the client's
+  current 5 s budget that is 10 s — what has been registered all along, now
+  by rule rather than by luck.
+
+The budget is configurable via `claude.answer_budget_seconds`; set it to
+`null` for ADR-0012 hold-until-answered, which requires an effectively
+unbounded registered timeout (`kaptn claude install --hold-until-answered`).
+It is baked into the registered command as `--timeout <budget>`, so the
+client's deadline and the hook timeout Claude Code enforces come from one
+number and cannot drift apart. The check reads the budget back out of the
+command — what is registered is what runs — and flags a mismatch against
+config as `answer_budget_drift`. `KAPTN_ANSWER_BUDGET` overrides it for a
+single invocation.
+
+`kaptn claude check` audits every settings source Claude Code merges —
+enterprise, user, project, project-local — and reports any PreToolUse hook
+that is async or under-margined. Kaptn's own hook failing is an error; a
+third-party hook failing is an advisory warning, since its answer time is
+unknowable. The same check runs at startup: if Kaptn's own hook cannot
+gate, the server refuses to start rather than pretend, and Claude Code's own
+prompts take over. Hooks contributed by plugins or `--settings` are outside
+what the check can see.
 
 ## Limits are per session
 
@@ -104,7 +145,7 @@ agent returns at next login, or immediately via `launchctl bootstrap`.
 Config lives under the `claude` key in `kaptn.config.json`:
 
 ```json
-"claude": { "enabled": true, "hook_port": 3002 }
+"claude": { "enabled": true, "hook_port": 3002, "answer_budget_seconds": 5 }
 ```
 
 Audit records from Claude sessions use `mode="claude"`, window name

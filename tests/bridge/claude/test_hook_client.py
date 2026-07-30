@@ -121,3 +121,53 @@ def test_entry_exits_zero(server, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exc_info:
         hook_client.entry()
     assert exc_info.value.code == 0
+
+
+class TestAnswerBudget:
+    """The client's deadline is configurable and travels with the registration.
+
+    It is registered as `--timeout <budget>` in the hook command so the
+    client's deadline and the hook timeout Claude Code enforces are derived
+    from one number and cannot drift into a killable gap (ADR-0012).
+    """
+
+    def test_parses_seconds(self):
+        assert hook_client.parse_answer_budget("30") == 30.0
+        assert hook_client.parse_answer_budget(30) == 30.0
+
+    def test_unbounded_tokens_mean_no_deadline(self):
+        for token in hook_client.UNBOUNDED_TOKENS:
+            assert hook_client.parse_answer_budget(token) is None
+        assert hook_client.parse_answer_budget("NONE") is None
+        assert hook_client.parse_answer_budget(-1) is None
+
+    def test_rejects_nonsense(self):
+        with pytest.raises(Exception):
+            hook_client.parse_answer_budget("soon")
+
+    def test_env_default(self, monkeypatch, capsys, server):
+        monkeypatch.setenv("KAPTN_ANSWER_BUDGET", "none")
+        seen = {}
+        real = hook_client.urllib.request.urlopen
+
+        def spy(request, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return real(request, timeout=5)
+
+        monkeypatch.setattr("urllib.request.urlopen", spy)
+        run_client(monkeypatch, capsys, json.dumps(EVENT), ["--port", str(server.port)])
+        assert seen["timeout"] is None  # unbounded hold — no deadline
+
+    def test_cli_flag_overrides_env(self, monkeypatch, capsys, server):
+        monkeypatch.setenv("KAPTN_ANSWER_BUDGET", "none")
+        seen = {}
+        real = hook_client.urllib.request.urlopen
+
+        def spy(request, timeout=None, **kwargs):
+            seen["timeout"] = timeout
+            return real(request, timeout=5)
+
+        monkeypatch.setattr("urllib.request.urlopen", spy)
+        run_client(monkeypatch, capsys, json.dumps(EVENT),
+                   ["--port", str(server.port), "--timeout", "7"])
+        assert seen["timeout"] == 7.0

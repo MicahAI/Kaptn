@@ -6,11 +6,13 @@ import pytest
 
 from bridge.claude.claude_setup import (
     HOOK_MARKER,
+    HookGuardError,
     build_hook_command,
     default_settings_path,
     install_hook,
     uninstall_hook,
 )
+from bridge.claude.hook_guard import UNBOUNDED_HOLD_TIMEOUT_SECONDS
 
 
 @pytest.fixture
@@ -70,6 +72,34 @@ class TestInstall:
         install_hook(settings_path, port=3002, python="/opt/py/bin/python")
         command = read(settings_path)["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         assert command.startswith('"/opt/py/bin/python"')
+
+
+class TestInstallGuards:
+    """Never register a hook that would silently gate nothing (ADR-0012)."""
+
+    def test_default_install_clears_the_margin(self, settings_path):
+        install_hook(settings_path, port=3002)
+        hook = read(settings_path)["hooks"]["PreToolUse"][0]["hooks"][0]
+        assert hook["timeout"] == 10  # ≥ 2× the client's 5s answer budget
+        assert "async" not in hook and "asyncRewake" not in hook
+
+    def test_under_margin_timeout_refused(self, settings_path):
+        with pytest.raises(HookGuardError, match="ABSTAINING"):
+            install_hook(settings_path, port=3002, timeout=5)
+        assert not settings_path.exists()  # nothing written
+
+    def test_unbounded_hold_needs_an_unbounded_timeout(self, settings_path):
+        with pytest.raises(HookGuardError, match="unbounded hold"):
+            install_hook(settings_path, port=3002, timeout=3600, answer_budget=None)
+        install_hook(settings_path, port=3002,
+                     timeout=UNBOUNDED_HOLD_TIMEOUT_SECONDS, answer_budget=None)
+        hook = read(settings_path)["hooks"]["PreToolUse"][0]["hooks"][0]
+        assert hook["timeout"] == UNBOUNDED_HOLD_TIMEOUT_SECONDS
+
+    def test_larger_budget_demands_a_larger_timeout(self, settings_path):
+        with pytest.raises(HookGuardError):
+            install_hook(settings_path, port=3002, timeout=10, answer_budget=30)
+        install_hook(settings_path, port=3002, timeout=90, answer_budget=30)
 
 
 class TestUninstall:
