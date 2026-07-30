@@ -28,5 +28,8 @@ so far. Fill in the Decision when we commit to building one.
 | [0007](0007-os-level-enforcement.md) | OS-level enforcement | Proposed |
 | [0008](0008-audit-search-scaling.md) | Audit search scaling (FTS) | Proposed |
 | [0009](0009-ai-classification-escalation-tier.md) | AI classification escalation tier | Proposed |
+| [0010](0010-research-kaptn-agent-enforcement.md) | Research — agent enforcement surface | Research |
+| [0011](0011-research-kaptn-fleet.md) | Research — Kaptn Fleet | Research |
+| [0012](0012-remote-approval-on-the-hook-framework.md) | Remote approval on the hook framework | Accepted 2026-07-30 — mechanisms live-verified |
 
 New ADRs start from [`template.md`](template.md).
