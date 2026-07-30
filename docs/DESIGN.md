@@ -307,7 +307,10 @@ Roll back changes when AutoPilot makes a mistake, using the audit log and commit
 
 Global defaults, per-window overrides, runtime modification via MCP, and persistence. All behavior flows from `kaptn.config.json` — poll intervals, AutoPilot rules, loop detection, logging. MCP tools can view and modify these at runtime with immediate hot-reload and disk persistence.
 
-**See**: [features/CONFIG.md](features/CONFIG.md)
+**See**: [features/CONFIG.md](features/CONFIG.md) for the design,
+[features/CONFIG_REFERENCE.md](features/CONFIG_REFERENCE.md) for what the
+code reads today (§10.4 summarizes the difference — per-window overrides
+were never built).
 
 ### 5.10 MCP Server (v2)
 
@@ -567,6 +570,10 @@ All behavior flows from a single config file — `kaptn.config.json` — at the 
 
 **See**: [features/CONFIG.md](features/CONFIG.md) for full schema, per-window overrides, runtime modification via MCP, and persistence.
 
+> The rest of §10 is the **original design**, kept as written. For what the
+> code reads today — which is a subset — see §10.4 and
+> [features/CONFIG_REFERENCE.md](features/CONFIG_REFERENCE.md).
+
 ### 10.1 Configuration Layers
 
 ```
@@ -590,6 +597,46 @@ kaptn.config.json (global defaults)
 ### 10.3 Runtime Modification
 
 MCP tools can view (`kaptn_defaults`) and modify (`kaptn_defaults_set`) configuration at runtime. Changes apply immediately via hot-reload and persist to the config file. See [features/CONFIG.md](features/CONFIG.md) Section 6.
+
+### 10.4 As built (2026-07-30)
+
+The sections above are the design. What shipped is a subset, and it drifted:
+several designed keys were carried in `DEFAULT_CONFIG` and in
+`kaptn.config.json` for a long time while no code read them. A key that does
+nothing is worse than an undocumented one — it reads as a working control.
+The rule now enforced by test: **every key in `DEFAULT_CONFIG` is read by the
+code**, and adding one means adding its reader in the same change.
+[features/CONFIG_REFERENCE.md](features/CONFIG_REFERENCE.md) is the factual
+reference; this section is the summary of how §10.1–10.3 turned out.
+
+**Configuration layers (§10.1).** Only the first, fourth, and fifth layers
+exist: file defaults → `kaptn_defaults_set` (persisted) → temporary MCP rules
+(`kaptn_watch`, in-memory TTL). Per-window and per-mode overrides were never
+built — nothing reads `windows`, `autopilot_profile`, or `mode_overrides`.
+
+**Key sections (§10.2), as they actually resolve:**
+
+| Designed | As built |
+|---|---|
+| `poll_intervals` — approvals 1s, messages 2s, status 5s | Only `approvals` is read. `messages`/`status` were removed; the DOM message and status polls run on the loop's own cadence |
+| `autopilot.rules` | As designed. Claude Code mode adds `hard_deny` and needs a `tool_call` rule for MCP/agent tools |
+| `autopilot.loop_detection` — same_action 3, oscillation 3, history 20 | As designed. `enabled` was inert until 2026-07-30 — it was printed by `kaptn status` but `LoopDetector` never received it |
+| `windows.overrides` | Not implemented |
+| `logging` — level, format, per-module | As designed, but inert until 2026-07-30: `setup_logging()` had exactly these parameters and no call site passed them. Now applied at the long-running entry points, with `--log-level` overriding |
+
+**Keys removed** because nothing read them: `mode` (§3's transport modes —
+the remote transport was never built, see ADR-0012), `bridge_port` (the
+WebSocket server in `bridge/server/` is still an empty stub), and `ide`
+(drivers are selected in code). The deployment modes in §3 remain the
+intended design; today only Mode 1 exists, and it needs no config key to
+say so.
+
+**Added since.** A `claude` section the design predates — `enabled`,
+`hook_port`, `launchd_label`, and `answer_budget_seconds`, the last of which
+bounds how long the Claude Code hook may take to answer. Its margin against
+the registered hook timeout is enforced, because a PreToolUse hook killed
+mid-answer abstains and abstaining fails open. See ADR-0012 and
+[features/CLAUDE_CODE.md](features/CLAUDE_CODE.md).
 
 ---
 
