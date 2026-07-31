@@ -622,6 +622,7 @@ Claude Code (kaptn claude ...):
   uninstall              Remove the hook entry from Claude settings
   serve                  Run the hook decision server standalone (no CDP needed)
   status                 Quick health check of the hook server
+  check                  Audit every PreToolUse hook for async/under-margined gating
 
 MCP (kaptn mcp ...):
   start                  Run the Kaptn MCP server (stdio) for agent-driven approvals

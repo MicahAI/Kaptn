@@ -6,6 +6,12 @@
 **Priority**: v1 — first feature built
 **Depends on**: CDP connection, IDE driver, approval monitor
 
+> **Design document.** The rules engine, limits, loop detection, escalation,
+> and audit integration below are built and accurate. Sections that were
+> never implemented are marked 🚧 in place — §7 profiles and §8 mode-aware
+> rules in full, plus individual claims in §3.3, §4.1, §4.2, §5.1, §5.2,
+> §5.3, and §6.2. Validated against the code 2026-07-30.
+
 ---
 
 ## 1. What is AutoPilot?
@@ -42,6 +48,7 @@ Each AI tool call falls into a category. AutoPilot rules are defined per categor
 | `command_unsafe` | Commands not marked safe | Medium-High | `npm install`, `rm`, `docker` |
 | `search` | Searching codebase or web | Low | "Search for X", "Read URL" |
 | `tool_call` | MCP tool invocations | Varies | Tool-specific |
+| `auto_reply` | Conversational stall answered by Auto-Answer (see §12) | Low | "Should I proceed?" |
 | `unknown` | Unrecognized approval type | High | Fallback — always escalate |
 
 ### 2.2 Detection
@@ -57,12 +64,12 @@ The IDE driver is responsible for parsing the approval dialog and returning a st
 ```python
 @dataclass
 class ApprovalRequest:
-    category: str           # "file_write", "command_unsafe", etc.
-    action: str             # The specific action text
-    details: dict           # File path, command, tool name, etc.
+    category: ApprovalCategory  # the enum, not a bare string
+    action: str                 # The specific action text
+    details: dict               # File path, command, tool name, etc.
     timestamp: datetime
-    window_name: str        # Which workspace window
-    mode: str               # "plan", "execute", "unknown"
+    window_name: str            # Which workspace window
+    mode: str                   # "plan", "execute", "unknown" — recorded, not acted on (§8)
 ```
 
 ---
@@ -129,7 +136,12 @@ Each rule matches a category and defines conditions and limits.
 | `approve` | Click the approve button | `allow` the tool call |
 | `deny` | Click the deny button (dialog stays overridable by the user) | `ask` with a "recommends denying" reason — the user can override; set `"hard_deny": true` on the rule to hard-block instead |
 | `escalate` | Do nothing — wait for manual approval (PWA notification or user at desk) | `ask` — Claude Code's normal permission prompt |
-| `approve_n` | Approve the next N occurrences, then escalate | Same |
+| `approve_n` 🚧 | Approve the next N occurrences, then escalate | Same |
+
+🚧 `approve_n` is **not implemented** — `ApprovalAction` is `approve`/`deny`/
+`escalate` only. The equivalent today is a temporary MCP rule with a count
+budget (`kaptn_autopilot`, `kaptn_approve_category`), which lives outside the
+static rules.
 
 Deny is a *recommendation*, not a wall: in both modes the user keeps the final say, matching the IDE's deny-with-override behavior. The exceptions are rules marked `"hard_deny": true` and loop-detection denies (the anti-runaway brake), which hard-block in hook mode.
 
@@ -154,7 +166,7 @@ Limits prevent runaway automation. When a limit is hit, AutoPilot escalates inst
 |---|---|
 | `max_per_session` | Max approvals of this type per session (resets on bridge restart) |
 | `max_per_minute` | Rate limit — max approvals per rolling 60-second window |
-| `max_total_cost` | Credit/cost ceiling (for future billing integration) |
+| `max_total_cost` 🚧 | Credit/cost ceiling (for future billing integration) — **not implemented**, see §13 item 3 |
 | `max_consecutive` | Max consecutive approvals of same action before pause |
 
 ### 4.2 Limit Behavior
@@ -162,7 +174,7 @@ Limits prevent runaway automation. When a limit is hit, AutoPilot escalates inst
 When a limit is hit:
 1. Log a WARNING with the limit details
 2. Switch the rule's action to `escalate`
-3. Send a push notification (if PWA connected): "AutoPilot paused — file edit limit reached (50/50)"
+3. 🚧 Send a push notification (if PWA connected): "AutoPilot paused — file edit limit reached (50/50)" — **not implemented**; there is no PWA and no push. `EscalationHandler` exposes an `add_listener` hook, but nothing registers one
 4. Wait for manual approval or limit reset
 
 ### 4.3 Limit Reset
@@ -170,7 +182,8 @@ When a limit is hit:
 - `max_per_session`: Resets on bridge restart or manual reset via CLI/PWA
 - `max_per_minute`: Rolling window, auto-resets
 - `max_consecutive`: Resets when a different action type occurs
-- Manual reset: `kaptn autopilot reset-limits` or PWA button
+- Manual reset: `kaptn reset` (clears limits, loop history, and pauses on the
+  running server)
 
 ---
 
@@ -183,7 +196,7 @@ AI assistants sometimes get stuck in loops — repeating the same action, hittin
 Track the last N approval requests. Flag a loop when:
 
 - **Same action repeated**: Identical action text 3+ times in a row
-- **Same error pattern**: Approval followed by the same error 2+ times
+- 🚧 **Same error pattern**: Approval followed by the same error 2+ times — **not implemented**; `LoopDetector` has no visibility into command outcomes
 - **Oscillation**: Alternating between two actions 3+ times (A→B→A→B→A)
 
 ### 5.2 Loop Response
@@ -191,9 +204,9 @@ Track the last N approval requests. Flag a loop when:
 When a loop is detected:
 
 1. Log a WARNING with the loop pattern
-2. Deny the current action (break the loop)
+2. Deny the current action (break the loop) — a hard block in Claude hook mode, the anti-runaway brake
 3. Send escalation to user: "Loop detected — Cascade is repeating: [action]. Denied."
-4. Pause AutoPilot for this window until user manually resumes
+4. 🚧 Pause AutoPilot for this window until user manually resumes — **not implemented**. `AutoPilotEngine.check()` returns `DENY` and nothing else; `pause_window()` exists but is only called by the standalone runner. Each subsequent repeat is denied on its own merits rather than the window latching off
 
 ### 5.3 Configuration
 
@@ -208,6 +221,11 @@ When a loop is detected:
   }
 }
 ```
+
+🚧 `pause_on_loop` is **not a real key** — nothing reads it (it pairs with the
+unimplemented pause in §5.2). The other four are live; `enabled: false`
+disables loop reporting while still tracking history. See
+[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md).
 
 ---
 
@@ -227,8 +245,14 @@ When AutoPilot can't (or shouldn't) make a decision, it escalates.
 
 | PWA Connected | Behavior |
 |---|---|
-| Yes | Send WebSocket event + push notification. Show approval card in PWA. |
+| Yes 🚧 | Send WebSocket event + push notification. Show approval card in PWA. |
 | No | Do nothing — leave the approval dialog open. User handles it at the desk. |
+
+🚧 Only the second row exists. There is no PWA, WebSocket server, or push —
+escalation appends to a pending list, logs, and notifies in-process listeners
+(none registered). In Claude Code hook mode an escalation becomes an `ask`,
+so the user answers at Claude Code's own prompt. ADR-0012 is the plan for
+closing this loop remotely.
 
 ### 6.3 Escalation Event
 
@@ -245,6 +269,11 @@ class EscalationEvent:
 ---
 
 ## 7. Profiles
+
+> 🚧 **Not implemented.** No profile exists in code — nothing reads
+> `autopilot_profile`, and the four rule sets below were never written.
+> Today there is one flat `autopilot.rules` list per config file. The
+> section stands as the design for named profiles.
 
 Pre-defined rule sets for common scenarios. Users can switch profiles per workspace or per mode.
 
@@ -293,6 +322,12 @@ Users can create custom profiles in the config file and assign them per workspac
 
 ## 8. Mode-Aware Rules
 
+> 🚧 **Not implemented.** `ApprovalRequest.mode` is captured and written to
+> the audit record, but no rule condition reads it and nothing reads
+> `mode_overrides` or `windows.overrides` (see
+> [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) § Not implemented). Mode is
+> recorded, never acted on.
+
 Cascade has different modes (Plan, Execute, etc.). AutoPilot should behave differently depending on the mode.
 
 ### 8.1 Mode Detection
@@ -331,27 +366,35 @@ Every AutoPilot decision is logged to the audit system.
 ```python
 @dataclass
 class AuditRecord:
-    id: str                 # UUID
+    id: str                    # UUID
     timestamp: datetime
-    window_name: str
+    window_name: str           # CDP window, or "claude:<project-dir>" in hook mode
+    tab_id: str                # CDP tab, or the Claude session id — scopes per-session limits
     mode: str
     request: ApprovalRequest
-    decision: str           # "approved", "denied", "escalated"
-    source: str             # "autopilot", "manual", "pwa"
-    rule_id: str | None     # Which rule matched
-    rule_action: str | None # What the rule said to do
-    limit_status: dict      # Current counts at time of decision
+    decision: ApprovalAction   # the enum: approve / deny / escalate
+    source: DecisionSource     # the enum: autopilot / manual / pwa
+    rule_id: str | None        # Which rule matched
+    rule_action: str | None    # What the rule said to do
+    limit_status: dict         # Current counts at time of decision
     loop_detected: bool
 ```
 
 ### 9.2 Audit Queries
 
-The audit log supports queries for:
-- All decisions for a window/session
-- Decisions by category
-- Decisions by outcome (approved/denied/escalated)
-- Loop detection events
-- Limit exceeded events
+`AuditLogger` exposes four queries:
+
+| Method | Returns |
+|---|---|
+| `get_recent(limit, window_name)` | Recent decisions, optionally for one window/session |
+| `get_recent_by_time(minutes)` | Decisions in the last N minutes |
+| `get_loops(limit)` | Loop-detection events |
+| `get_count(window_name)` | Decision count, optionally scoped |
+
+🚧 Filtering by category or by outcome is **not** a query method — the rows
+carry both fields, so a caller filters in Python. Limit-exceeded events are
+not separately indexed; they appear as escalations with `limit_status`
+populated.
 
 ---
 
@@ -359,16 +402,28 @@ The audit log supports queries for:
 
 ### 10.1 Commands
 
+There is no `kaptn autopilot` command group — AutoPilot is configured in
+`kaptn.config.json` and controlled through the top-level commands:
+
 ```bash
-kaptn autopilot status          # Show current state, active profile, limits
-kaptn autopilot enable          # Enable AutoPilot
-kaptn autopilot disable         # Disable AutoPilot
-kaptn autopilot profile <name>  # Switch to a profile
-kaptn autopilot reset-limits    # Reset all limit counters
-kaptn autopilot rules           # List all active rules
-kaptn autopilot log             # Show recent audit log
-kaptn autopilot log --loops     # Show only loop detection events
+kaptn start                     # Run the bridge: CDP windows + Claude hook server
+kaptn stop                      # Stop everything (launchd agent + manual instances)
+kaptn status                    # Servers, AutoPilot config + rules, live usage, audit summary
+kaptn reset                     # Clear rule limits, loop history, and pauses
+kaptn log                       # Audit log (-n COUNT, --loops for loop events)
+kaptn help                      # Command overview
 ```
+
+`kaptn status` covers the designed `autopilot status` and `autopilot rules`
+(it prints the rules table with live counts); `kaptn reset` covers
+`reset-limits`; `kaptn log --loops` covers `log --loops`. Enable/disable is
+`autopilot.enabled` in config, not a command. There are no profiles to
+switch (§7).
+
+Claude Code mode adds `kaptn claude install|uninstall|serve|status|check`,
+and `kaptn mcp start` runs the MCP server. Runtime rule changes go through
+the MCP tools (`kaptn_defaults_set`, `kaptn_watch`, `kaptn_approve_category`),
+not the CLI.
 
 ### 10.2 Example Session
 
@@ -384,6 +439,10 @@ $ kaptn start
 [INFO] [Kaptn] command_unsafe: npm install ws → ESCALATED (rule: escalate-unsafe-commands)
 [WARN] [Kaptn] Loop detected: "Edit bridge/main.py" repeated 3 times → DENIED, AutoPilot paused
 ```
+
+🚧 Illustrative, not literal: there is no `profile: standard` (§7) and a
+loop denies without pausing (§5.2). The approve/escalate lines are
+representative of real output.
 
 ---
 
