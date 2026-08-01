@@ -31,5 +31,6 @@ so far. Fill in the Decision when we commit to building one.
 | [0010](0010-research-kaptn-agent-enforcement.md) | Research — agent enforcement surface | Research |
 | [0011](0011-research-kaptn-fleet.md) | Research — Kaptn Fleet | Research |
 | [0012](0012-remote-approval-on-the-hook-framework.md) | Remote approval on the hook framework | Accepted 2026-07-30 — mechanisms live-verified |
+| [0013](0013-credit-based-approval-budgets.md) | Credit-based approval budgets with learned pricing | Proposed |
 
 New ADRs start from [`template.md`](template.md).
