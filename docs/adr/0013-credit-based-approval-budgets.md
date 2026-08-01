@@ -93,6 +93,30 @@ price(request) = learned_base(fingerprint) × static_modifiers(request)
   checkout. Books are never shared across machines without review — a
   shared price book is a poisoning target.
 
+### Budget modes and the per-action gate
+
+The cumulative budget and the per-action price gate are orthogonal knobs:
+
+```
+budget:
+  credits: 100 | "unlimited"
+  escalate_above: 20     # any single action priced >= this escalates
+```
+
+- **Metered (default):** finite credits; exhaustion raises the refill
+  escalation below. The per-action gate applies here too — a huge one-shot
+  action must not slip through just because the tank happens to be full.
+- **Unlimited:** no cumulative meter at all. Supervision rides entirely on
+  the per-action gate: cheap, well-precedented actions flow freely forever;
+  anything priced at or above `escalate_above` (large tasks, opaque
+  scripts, deny-demoted fingerprints) escalates regardless of spend. This
+  is the mature end-state once prices are trusted — user attention is spent
+  only on expensive actions, never on counting cheap ones.
+- **Unlimited with no gate set is a misconfiguration** — that is just
+  approve-everything. Kaptn warns on it and the dashboard shows a running
+  spend ticker; audit and periodic spend notifications (soft checkpoints,
+  no gating) remain active in every mode.
+
 ### Refill escalation
 
 Budget exhaustion raises a `governor`-category escalation (always
@@ -194,7 +218,8 @@ are reviewed after the first month of live data.
   fail-closed opacity, at the cost of some over-escalation); per-project
   precedent books add state to back up and reason about.
 - **Neutral:** config schema migration `limits.max_per_session` →
-  `budget.credits` (with a compat shim reading old configs as all-prices-1);
+  `budget.credits` / `budget.escalate_above`, including the `"unlimited"`
+  mode (with a compat shim reading old configs as all-prices-1, metered);
   dashboard work to show spend, receipts, and the self-evaluation metrics;
   refill flow needs a first-class UI affordance; the interim pattern rule
   (option 1) can ship immediately and be retired when pricing lands.
